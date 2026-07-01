@@ -1,120 +1,73 @@
-# gitghost 👻
+# gitghost
 
-**An exposure dossier for any GitHub identity — including the secrets they thought they deleted.**
+Finds secrets in a GitHub account's public repos — including the ones that got committed, then "deleted," but are still sitting in the git history where anyone can read them.
 
-Point it at a username. It clones every public repo *with full history*, scans for
-leaked credentials, recovers secrets that were "removed" but still live in git history,
-reads what your commit metadata quietly reveals about you, and scores the whole thing
-as one number: your **Exposure Score**, 0–100.
+I built this after noticing how often the real leak isn't in someone's current code — it's in a commit from eight months ago that they thought they'd cleaned up. You paste an API key, catch it, delete the line, and move on. The latest version looks fine. But the old commit still has the key, and `git log` hands it to anyone who clones the repo. Most scanners only look at your current files and miss this entirely. gitghost goes digging through history for exactly those, and then rolls everything up into a single exposure score so you can actually tell how bad things are at a glance.
 
 ```
-$ gitghost dana-rivera
+$ gitghost cy3erm
 
-[=] EXPOSURE SCORE: 96/100  [CRITICAL]  grade F
-    · 7 live secrets in current code
-    · 3 'deleted' secrets still recoverable from history
-    · real author email exposed (dana.rivera@gmail.com)
-    · timezone inferable from commit times (UTC+0530)
-[=] dossier written to: gitghost-dossier.html
+EXPOSURE SCORE: 96/100  [CRITICAL]  grade F
+  · 7 live secrets in current code
+  · 3 "deleted" secrets still recoverable from history
+  · author email exposed in commit metadata
+  · timezone inferable from commit times (UTC+0530)
+
+dossier written to gitghost-dossier.html
 ```
 
-The output is a shareable HTML dossier, not terminal noise.
+You get an HTML report you can open in a browser, not just a wall of terminal text.
 
----
+## Running it
 
-## Why this is different
-
-Secret scanners like TruffleHog and gitleaks grep your *current* files. Two things
-almost nobody does, and they're the whole point of gitghost:
-
-**1. It recovers the "deleted" ones.** When you commit a secret, panic, and remove
-the line (or force-push), the blob usually survives — reachable in an old commit, or
-orphaned but not yet garbage-collected. gitghost diffs every historical blob against
-your current tree. Anything holding a secret that's *gone from HEAD but still in
-history* is a **ghost**: you think it's gone, and to anyone who clones the repo, it's
-one command away.
-
-**2. It gives you one number.** The Exposure Score turns a pile of findings into a
-credit-score-for-how-much-you-leak that a non-security person understands instantly —
-and instinctively wants to compare.
-
-## Install
+You'll need Python 3.10+ and git. Nothing to `pip install`.
 
 ```bash
-git clone https://github.com/<you>/gitghost && cd gitghost
-python3 -m gitghost <github-username>
+git clone https://github.com/cy3erm/gitghost
+cd gitghost
+python3 -m gitghost <username>
 ```
 
-Zero runtime dependencies — standard library only. Set `GITHUB_TOKEN` to raise the API
-rate limit from 60/hr to 5000/hr.
-
-```bash
-python3 -m gitghost torvalds                 # scan a public identity
-python3 -m gitghost --local ./my-repo        # scan a repo already on disk
-python3 -m gitghost yourname --limit 50 --out report.html
-```
-
-Try it on the built-in demo:
+If you'd rather not point it at a real person first, there's a demo. It builds a little repo with fake credentials — including one that gets "deleted" a few commits in — so you can watch the history recovery dig it back out:
 
 ```bash
 bash demo/make_demo_repo.sh /tmp/demo
-python3 -m gitghost --local /tmp/demo --name billing-service
+python3 -m gitghost --local /tmp/demo --name demo
 ```
 
-## What it surfaces
+A few other flags:
 
-| | |
-|---|---|
-| **Live secrets** | AWS / GCP / Stripe / GitHub / OpenAI / Slack keys, private keys, DB connection strings, high-entropy assignments |
-| **Ghost secrets** | the same, recovered from history after being "deleted" |
-| **Metadata leaks** | real author email, timezone + active hours inferred from commit times |
-| **Infra breadcrumbs** | internal hostnames, hardcoded private IPs, committed `.env` files |
-
-## Scope & ethics — read this
-
-gitghost is built to be the impressive version *and* the defensible one. That's a
-design choice baked into the code, not a disclaimer:
-
-- **Detection-only.** It reports that a string matches a credential format and stops.
-  It **never** authenticates a discovered secret against its provider to check if it's
-  "live" — confirming someone else's key by using it is unauthorized access.
-- **Public repos only.** It reads data the owner already chose to publish. It never
-  touches private repositories.
-- **Redacted output.** Findings are shown as `abcd••••••••wxyz`, never in full.
-- **Meant for auditing yourself, your org, or a target you're authorized to assess.**
-
-Run it on your own identity first. You'll probably find a stale token, and that's the
-point.
-
-## The launch (if you're posting this)
-
-A tool launch gets stars; a tool launch *with original research* gets the front page.
-Run gitghost across a set of well-known **public** orgs, aggregate the numbers, and
-publish a short "State of GitHub Exposure" writeup: average Exposure Score, how many
-"deleted" secrets are still recoverable, how far back leaks persist. Everything you
-report is already public by definition, and the framing — *"here's how much leaks from
-one identity, and I never touched anyone's systems to prove it"* — is what makes it land.
-
-## Architecture
-
-```
-gitghost/
-  github.py     enumerate + clone public repos (history included)
-  scanner.py    walk the working tree, scan files
-  ghost.py      recover secrets from history that are gone from HEAD  ← signature
-  rules.py      provider signatures + entropy engine (detection-only)
-  metadata.py   author email + timezone/activity inference
-  score.py      the Exposure Score model
-  report.py     the shareable HTML dossier
-  cli.py        pipeline
+```bash
+python3 -m gitghost <username> --limit 50        # cap how many repos
+python3 -m gitghost <username> --out report.html # where to write the report
+python3 -m gitghost --local ./some-repo          # scan a checkout you have locally
 ```
 
-## Roadmap
+Scanning more than a couple of accounts? Set `GITHUB_TOKEN` (any token works, it doesn't need any scopes) so you don't run into GitHub's 60-requests-an-hour limit for anonymous calls.
 
-- **Watch mode** — monitor your own identity and alert the instant new exposure appears, fast enough to rotate before anyone finds it.
-- **Time Machine view** — animated timeline of when each secret entered and was "deleted."
-- **Remediation bundle** — generate the exact `git filter-repo` purge + rotation steps per finding.
+## What it looks for
+
+- Cloud and service keys — AWS, GCP, Stripe, GitHub, OpenAI, Slack, private keys, database URLs
+- The same keys pulled back out of history after they were removed from the current code
+- Metadata you might not realize you're sharing — the email in your commits, and a rough guess at your timezone and working hours from commit timestamps
+- Committed `.env` files, internal hostnames, hardcoded private IPs
+
+The score is deliberately one number so you can watch it move — run it, clean things up, run it again. A single live cloud key is enough to put an account in the red by itself; a pile of smaller stuff pushes it up from there.
+
+## Where it draws the line
+
+It only ever reads public repositories — things the account already chose to publish — and it's detection-only. It'll tell you a string *looks like* a credential and leave it at that. It won't try the key against the actual service to see if it still works, because quietly logging into someone else's account isn't the tool's job, and honestly it's not yours either. Findings in the report are shown as fingerprints, not the raw values, so you can share a report without leaking anything.
+
+Point it at yourself first. Most people turn up at least one thing they'd completely forgotten about — I did.
+
+## A small confession
+
+The first time I pushed this repo, GitHub's own secret scanner blocked me because the demo's fake keys looked real enough to trip it. Which is a pretty good sign the whole premise holds up: credentials really do end up in commits, and something really is watching for them. (The demo secrets are harmless placeholders — that's the joke.)
+
+## Adding your own detections
+
+The patterns live in `gitghost/rules.py`. Each one is just a name, a regex, a severity, and a line of advice for fixing it — easy to add. If you write a good one, send a PR.
 
 ## License
 
-MIT.
+MIT
