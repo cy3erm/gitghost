@@ -1,0 +1,2 @@
+# gitghost runs on the Python 3.10+ standard library — no runtime dependencies.
+# (playwright is only used to screenshot the report during development.)
