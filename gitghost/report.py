@@ -14,17 +14,37 @@ def _esc(s: str) -> str:
     return html.escape(str(s))
 
 
+def _link(url: str, text: str) -> str:
+    return f'<a href="{_esc(url)}" target="_blank" rel="noopener">{text}</a>'
+
+
 def _finding_row(f: Finding) -> str:
     tone = "ghost" if f.is_ghost else "live"
-    where = _esc(f.path) if f.path else ""
-    loc = f"{where}:{f.line_no}" if not f.is_ghost else where
-    commit = f'<span class="commit">{_esc(f.commit)}</span>' if f.is_ghost and f.commit else ""
+    repo_tag = f'<span class="repo">{_esc(f.repo)}</span> ' if f.repo else ""
+
+    if f.is_ghost:
+        loc_text = _esc(f.path) if f.path else ""   # "(history) entered DATE"
+        if f.repo_url and f.commit and f.commit != "dangling":
+            commit_html = _link(f"{f.repo_url}/commit/{f.commit}", _esc(f.commit))
+        elif f.commit:
+            commit_html = f'<span class="commit">{_esc(f.commit)}</span>'
+        else:
+            commit_html = ""
+        loc = f"{loc_text} {commit_html}"
+    else:
+        pathline = f"{_esc(f.path)}:{f.line_no}"
+        if f.repo_url and f.path:
+            # HEAD resolves to the repo's default branch on GitHub
+            loc = _link(f"{f.repo_url}/blob/HEAD/{f.path}#L{f.line_no}", pathline)
+        else:
+            loc = pathline
+
     return f"""
       <tr class="frow {tone}">
         <td class="sev"><span class="sev-dot s{f.severity}">{f.severity}</span></td>
         <td class="lbl">{_esc(f.label)}</td>
         <td class="val"><code class="redaction">{_esc(f.redacted)}</code></td>
-        <td class="loc">{loc} {commit}<div class="rem">{_esc(f.remediation)}</div></td>
+        <td class="loc">{repo_tag}{loc}<div class="rem">{_esc(f.remediation)}</div></td>
       </tr>"""
 
 
@@ -163,6 +183,10 @@ def render_report(identity: str, card: ScoreCard, findings: list[Finding],
   .frow.ghost code.redaction {{ background:var(--ghost); }}
   .loc {{ font-family:'Space Mono',monospace; font-size:12px; color:var(--muted); }}
   .commit {{ color:var(--ghost); }}
+  .repo {{ display:inline-block; background:var(--ink); color:var(--paper);
+    font-family:'Space Mono',monospace; font-size:11px; padding:1px 6px; margin-right:6px; }}
+  .loc a {{ color:var(--ink); text-decoration:underline; text-underline-offset:2px; }}
+  .frow.ghost .loc a {{ color:var(--ghost); }}
   .rem {{ margin-top:6px; font-family:'Archivo',sans-serif; font-size:13px; color:var(--ink); max-width:52ch; }}
 
   .meta-grid {{ display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--line);

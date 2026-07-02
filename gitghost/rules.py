@@ -115,6 +115,7 @@ class Finding:
     path: str = ""
     commit: str = ""
     is_ghost: bool = False   # True == recovered from history, gone from HEAD
+    repo_url: str = ""       # https://github.com/owner/repo, for building deep links
 
 
 # Non-secret format prefixes. AKIA / ghp_ / sk_live_ etc. are identifiers, not

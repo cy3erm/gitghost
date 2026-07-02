@@ -28,6 +28,7 @@ class Repo:
     full_name: str
     clone_url: str
     pushed_at: str
+    html_url: str = ""
 
 
 def _get(url: str) -> list | dict:
@@ -56,6 +57,7 @@ def list_public_repos(identity: str, limit: int = 30) -> list[Repo]:
             repos.append(Repo(
                 name=d["name"], full_name=d["full_name"],
                 clone_url=d["clone_url"], pushed_at=d.get("pushed_at", ""),
+                html_url=d.get("html_url", ""),
             ))
             if len(repos) >= limit:
                 break

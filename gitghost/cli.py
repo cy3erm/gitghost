@@ -54,6 +54,8 @@ def run_identity(identity: str, limit: int, out: str) -> None:
                 print(f"    - skip {r.name} (clone failed)")
                 continue
             f, m = _scan_one(dest, r.name)
+            for finding in f:            # tag findings with the repo's URL for deep links
+                finding.repo_url = r.html_url
             all_findings += f
             merged_meta = _merge_meta(merged_meta, m)
             tag = f"{len([x for x in f if x.kind=='secret' and not x.is_ghost])} live / {len([x for x in f if x.is_ghost])} ghost"
