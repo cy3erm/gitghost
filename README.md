@@ -16,7 +16,7 @@ EXPOSURE SCORE: 96/100  [CRITICAL]  grade F
 dossier written to gitghost-dossier.html
 ```
 
-You get an HTML report you can open in a browser, not just a wall of terminal text.
+You get an HTML report you can open in a browser, not just a wall of terminal text. Every finding links straight to the spot — the exact file and line for live secrets, or the commit for the ones recovered from history — so you're not hunting for where the key actually is. And the report ends with a short how-to-fix guide, because the instinct when you see a leaked key (delete the file, nuke the repo) doesn't actually fix anything: the key's already been cloned. The real fix is to rotate it, then purge it from history, and the report walks you through both.
 
 ## Running it
 
@@ -58,11 +58,7 @@ The score is deliberately one number so you can watch it move — run it, clean 
 
 It only ever reads public repositories — things the account already chose to publish — and it's detection-only. It'll tell you a string *looks like* a credential and leave it at that. It won't try the key against the actual service to see if it still works, because quietly logging into someone else's account isn't the tool's job, and honestly it's not yours either. Findings in the report are shown as fingerprints, not the raw values, so you can share a report without leaking anything.
 
-Point it at yourself first. Most people turn up at least one thing they'd completely forgotten about — I did.
-
-## A small confession
-
-The first time I pushed this repo, GitHub's own secret scanner blocked me because the demo's fake keys looked real enough to trip it. Which is a pretty good sign the whole premise holds up: credentials really do end up in commits, and something really is watching for them. (The demo secrets are harmless placeholders — that's the joke.)
+Point it at yourself first. Most people turn up at least one thing they'd completely forgotten about — I did. (The first time I pushed this repo, GitHub's own secret scanner blocked me because the demo's fake keys looked real enough to trip it. Which is about the best proof of the premise I could ask for.)
 
 ## Adding your own detections
 
