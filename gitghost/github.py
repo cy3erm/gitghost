@@ -14,7 +14,7 @@ finds.
 import json
 import os
 import subprocess
-import tempfile
+
 import urllib.request
 from dataclasses import dataclass
 

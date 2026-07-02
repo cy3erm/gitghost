@@ -16,7 +16,7 @@ access. We report format + entropy confidence and stop there.
 import hashlib
 import math
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 # severity is 1-10; it feeds the Exposure Score. A cloud root credential is a

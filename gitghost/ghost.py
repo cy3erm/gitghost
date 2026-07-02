@@ -16,7 +16,7 @@ objects; it never contacts any secret's provider.
 
 import re
 import subprocess
-from dataclasses import dataclass
+
 
 from .rules import Finding, scan_text
 

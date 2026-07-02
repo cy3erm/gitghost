@@ -49,6 +49,7 @@ def _band(score: int) -> tuple[str, str]:
 
 
 def compute_score(findings: list[Finding], meta: MetadataReport) -> ScoreCard:
+    meta = meta or MetadataReport()   # tolerate the all-clones-failed path
     secrets = [f for f in findings if f.kind == "secret"]
     infra = [f for f in findings if f.kind == "infra"]
     live = [f for f in secrets if not f.is_ghost]

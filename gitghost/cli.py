@@ -9,10 +9,8 @@ Output: a scored HTML dossier. Detection-only; public repos only.
 """
 
 import argparse
-import os
 import sys
 import tempfile
-import webbrowser
 
 from . import github
 from .ghost import recover_ghosts
