@@ -183,6 +183,10 @@ def render_report(identity: str, card: ScoreCard, findings: list[Finding],
   .frow.ghost code.redaction {{ background:var(--ghost); }}
   .loc {{ font-family:'Space Mono',monospace; font-size:12px; color:var(--muted); }}
   .commit {{ color:var(--ghost); }}
+  .fixsteps {{ margin:14px 0 0; padding-left:20px; }}
+  .fixsteps li {{ margin:12px 0; font-size:15px; line-height:1.5; max-width:70ch; }}
+  .cmd {{ display:block; margin:8px 0; background:var(--ink); color:var(--paper);
+    font-family:'Space Mono',monospace; font-size:12.5px; padding:8px 12px; overflow-x:auto; }}
   .repo {{ display:inline-block; background:var(--ink); color:var(--paper);
     font-family:'Space Mono',monospace; font-size:11px; padding:1px 6px; margin-right:6px; }}
   .loc a {{ color:var(--ink); text-decoration:underline; text-underline-offset:2px; }}
@@ -231,6 +235,27 @@ def render_report(identity: str, card: ScoreCard, findings: list[Finding],
   {ghost_section}
   {live_section}
   {infra_section}
+
+  <section class="block fixguide">
+    <div class="block-head"><span class="eyebrow">How to actually fix these</span>
+      <h2>Rotate first. Deleting the repo doesn't help.</h2></div>
+    <ol class="fixsteps">
+      <li><b>Rotate the credential at the provider.</b> This is the real fix. Anyone
+        who cloned the repo already has the key, so revoking or rotating it is the
+        only thing that truly closes the exposure. Each finding above says where to
+        do this. Do this <i>first</i>.</li>
+      <li><b>Then purge it from history.</b> Deleting the line in a new commit isn't
+        enough — the old commit still holds the secret (that's what the "ghost"
+        findings are). Strip the file from all history and force-push:
+        <code class="cmd">git filter-repo --path PATH/TO/FILE --invert-paths</code>
+        then <code class="cmd">git push --force</code>. (Install <code>git-filter-repo</code>
+        first; it's safer than the old filter-branch.)</li>
+      <li><b>Don't just delete the repo or the commit.</b> That doesn't un-leak
+        anything already public, and it throws away your history for no security
+        benefit. Rotate the key, then do the history surgery.</li>
+    </ol>
+  </section>
+
   {meta_section}
 
   <div class="foot">
