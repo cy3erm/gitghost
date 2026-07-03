@@ -1,11 +1,9 @@
-"""Scan a checked-out repository's working tree for findings."""
-
 import os
 from dataclasses import dataclass, field
 
 from .rules import Finding, scan_text
 
-# Directories and extensions that are noise, not signal.
+
 SKIP_DIRS = {".git", "node_modules", "vendor", "dist", "build", ".venv",
              "venv", "__pycache__", ".next", "target", ".gradle"}
 SKIP_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".pdf", ".zip",
@@ -48,7 +46,7 @@ def scan_repo(root: str, repo_name: str) -> RepoScan:
             for f in scan_text(text):
                 f.repo = repo_name
                 f.path = rel
-                # a committed .env is its own red flag regardless of contents
+
                 if os.path.basename(rel).startswith(".env") and f.kind == "secret":
                     f.severity = min(10, f.severity + 1)
                 result.findings.append(f)

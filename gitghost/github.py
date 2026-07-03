@@ -1,16 +1,3 @@
-"""
-GitHub side: list a username/org's public repos and clone them shallowly-but-
-with-history (we need history for ghost recovery, so no --depth=1).
-
-Auth: reads GITHUB_TOKEN from the environment if present (raises the rate limit
-from 60/hr to 5000/hr). Unauthenticated still works for small targets.
-
-Scope note lives here on purpose: this fetches PUBLIC repositories only. That is
-data the owner already chose to publish. gitghost surfaces and scores it; it
-does not touch private repos, and it never authenticates against any secret it
-finds.
-"""
-
 import json
 import os
 import subprocess
@@ -47,7 +34,7 @@ def list_public_repos(identity: str, limit: int = 30) -> list[Repo]:
     repos: list[Repo] = []
     page = 1
     while len(repos) < limit:
-        # works for both users and orgs
+
         data = _get(f"{API}/users/{identity}/repos?per_page=100&page={page}&sort=pushed")
         if not isinstance(data, list) or not data:
             break
@@ -66,11 +53,10 @@ def list_public_repos(identity: str, limit: int = 30) -> list[Repo]:
 
 
 def repo_from_url(url: str) -> Repo:
-    """Build a Repo from a GitHub URL or 'owner/name' shorthand."""
     u = url.strip().rstrip("/")
     if u.endswith(".git"):
         u = u[:-4]
-    # strip scheme/host to get owner/name
+
     for prefix in ("https://github.com/", "http://github.com/", "git@github.com:", "github.com/"):
         if u.startswith(prefix):
             u = u[len(prefix):]

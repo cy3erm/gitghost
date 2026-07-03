@@ -1,14 +1,3 @@
-#!/usr/bin/env python3
-"""
-gitghost — GitHub exposure dossier.
-
-    gitghost <github-username>                 scan a public identity
-    gitghost --repo <url>                      scan a single repo by URL
-    gitghost --local <path> --name <label>     scan a repo already on disk
-
-Output: a scored HTML dossier. Detection-only; public repos only.
-"""
-
 import argparse
 import sys
 import tempfile
@@ -72,7 +61,7 @@ def run_identity(identity: str, limit: int, out: str) -> None:
                 print(f"    - skip {r.name} (clone failed)")
                 continue
             f, m = _scan_one(dest, r.name)
-            for finding in f:            # tag findings with the repo's URL for deep links
+            for finding in f:
                 finding.repo_url = r.html_url
             all_findings += f
             merged_meta = _merge_meta(merged_meta, m)

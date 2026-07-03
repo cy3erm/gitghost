@@ -1,5 +1,3 @@
-"""Render the scan into a standalone, shareable HTML dossier."""
-
 import html
 from datetime import datetime, timezone
 
@@ -23,7 +21,7 @@ def _finding_row(f: Finding) -> str:
     repo_tag = f'<span class="repo">{_esc(f.repo)}</span> ' if f.repo else ""
 
     if f.is_ghost:
-        loc_text = _esc(f.path) if f.path else ""   # "(history) entered DATE"
+        loc_text = _esc(f.path) if f.path else ""
         if f.repo_url and f.commit and f.commit != "dangling":
             commit_html = _link(f"{f.repo_url}/commit/{f.commit}", _esc(f.commit))
         elif f.commit:
@@ -34,7 +32,7 @@ def _finding_row(f: Finding) -> str:
     else:
         pathline = f"{_esc(f.path)}:{f.line_no}"
         if f.repo_url and f.path:
-            # HEAD resolves to the repo's default branch on GitHub
+
             loc = _link(f"{f.repo_url}/blob/HEAD/{f.path}#L{f.line_no}", pathline)
         else:
             loc = pathline

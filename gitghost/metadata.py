@@ -1,11 +1,3 @@
-"""
-Metadata leaks. Commits carry more about the author than the author intends:
-their real email, and — from the timezone offset and hour-of-day distribution
-of when they commit — a strong hint at where they live and their daily rhythm.
-
-Framed as self-audit: "here is what your git history quietly tells a stranger."
-"""
-
 import re
 import subprocess
 from collections import Counter
@@ -41,7 +33,7 @@ def analyze_metadata(root: str) -> MetadataReport:
         email, ts = line.split("|", 1)
         count += 1
         emails[email.strip()] += 1
-        # ts looks like: 2023-06-04 14:03:22 +0200
+
         m = re.search(r"(\d{2}):\d{2}:\d{2}\s([+-]\d{4})", ts)
         if m:
             hours[int(m.group(1))] += 1
