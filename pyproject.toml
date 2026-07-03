@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gitghost"
+dynamic = ["version"]
+description = "Find secrets in a GitHub account's public repos — including the ones still hiding in git history after being 'deleted'."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "cy3erm" }]
+keywords = ["security", "secrets-detection", "git", "osint", "devsecops", "bug-bounty"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Security",
+]
+dependencies = []   # standard library only
+
+[project.urls]
+Homepage = "https://github.com/cy3erm/gitghost"
+Repository = "https://github.com/cy3erm/gitghost"
+Issues = "https://github.com/cy3erm/gitghost/issues"
+
+[project.scripts]
+gitghost = "gitghost.cli:main"
+
+[tool.setuptools]
+packages = ["gitghost"]
+
+[tool.setuptools.dynamic]
+version = { attr = "gitghost.__version__" }
