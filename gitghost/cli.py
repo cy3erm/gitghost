@@ -3,6 +3,7 @@
 gitghost — GitHub exposure dossier.
 
     gitghost <github-username>                 scan a public identity
+    gitghost --repo <url>                      scan a single repo by URL
     gitghost --local <path> --name <label>     scan a repo already on disk
 
 Output: a scored HTML dossier. Detection-only; public repos only.
@@ -33,6 +34,23 @@ def run_local(path: str, name: str, out: str) -> None:
     findings, meta = _scan_one(path, name)
     card = compute_score(findings, meta)
     _emit(name, card, findings, meta, 1, out)
+
+
+def run_repo(url: str, out: str) -> None:
+    try:
+        repo = github.repo_from_url(url)
+    except ValueError as e:
+        sys.exit(f"[!] {e}")
+    print(f"[*] scanning single repo: {repo.full_name}")
+    with tempfile.TemporaryDirectory() as tmp:
+        dest = github.clone(repo, tmp)
+        if not dest:
+            sys.exit(f"[!] could not clone {repo.clone_url} (private, renamed, or network issue)")
+        findings, meta = _scan_one(dest, repo.name)
+        for finding in findings:
+            finding.repo_url = repo.html_url
+        card = compute_score(findings, meta)
+        _emit(repo.full_name, card, findings, meta, 1, out)
 
 
 def run_identity(identity: str, limit: int, out: str) -> None:
@@ -90,6 +108,7 @@ def _emit(identity, card, findings, meta, repos_scanned, out):
 def main() -> None:
     p = argparse.ArgumentParser(prog="gitghost", description="GitHub exposure dossier (detection-only).")
     p.add_argument("identity", nargs="?", help="GitHub username or org")
+    p.add_argument("--repo", help="scan a single repo by URL or owner/name")
     p.add_argument("--local", help="scan a repo already on disk instead of GitHub")
     p.add_argument("--name", default="local-repo", help="label for --local scans")
     p.add_argument("--limit", type=int, default=30, help="max repos to scan")
@@ -98,10 +117,12 @@ def main() -> None:
 
     if args.local:
         run_local(args.local, args.name, args.out)
+    elif args.repo:
+        run_repo(args.repo, args.out)
     elif args.identity:
         run_identity(args.identity, args.limit, args.out)
     else:
-        p.error("provide a GitHub username, or --local <path>")
+        p.error("provide a GitHub username, --repo <url>, or --local <path>")
 
 
 if __name__ == "__main__":

@@ -65,6 +65,26 @@ def list_public_repos(identity: str, limit: int = 30) -> list[Repo]:
     return repos
 
 
+def repo_from_url(url: str) -> Repo:
+    """Build a Repo from a GitHub URL or 'owner/name' shorthand."""
+    u = url.strip().rstrip("/")
+    if u.endswith(".git"):
+        u = u[:-4]
+    # strip scheme/host to get owner/name
+    for prefix in ("https://github.com/", "http://github.com/", "git@github.com:", "github.com/"):
+        if u.startswith(prefix):
+            u = u[len(prefix):]
+            break
+    parts = u.split("/")
+    if len(parts) < 2:
+        raise ValueError(f"not a valid repo reference: {url!r} (expected owner/name or a GitHub URL)")
+    owner, name = parts[0], parts[1]
+    full = f"{owner}/{name}"
+    return Repo(name=name, full_name=full,
+                clone_url=f"https://github.com/{full}.git",
+                pushed_at="", html_url=f"https://github.com/{full}")
+
+
 def clone(repo: Repo, dest_parent: str) -> str | None:
     dest = os.path.join(dest_parent, repo.name)
     r = subprocess.run(
