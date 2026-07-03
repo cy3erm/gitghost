@@ -41,6 +41,7 @@ A few other flags:
 python3 -m gitghost <username> --limit 50        # cap how many repos
 python3 -m gitghost <username> --out report.html # where to write the report
 python3 -m gitghost --local ./some-repo          # scan a checkout you have locally
+python3 -m gitghost --repo owner/name            # scan just one repo (URL or owner/name)
 ```
 
 Scanning more than a couple of accounts? Set `GITHUB_TOKEN` (any token works, it doesn't need any scopes) so you don't run into GitHub's 60-requests-an-hour limit for anonymous calls.
