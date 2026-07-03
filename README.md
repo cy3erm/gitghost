@@ -20,7 +20,16 @@ You get an HTML report you can open in a browser, not just a wall of terminal te
 
 ## Running it
 
-You'll need Python 3.10+ and git. Nothing to `pip install`.
+You'll need Python 3.10+ and git. There are no runtime dependencies — it's all standard library.
+
+Install it as a command:
+
+```bash
+pipx install git+https://github.com/cy3erm/gitghost
+gitghost <username>
+```
+
+Or just clone and run it without installing:
 
 ```bash
 git clone https://github.com/cy3erm/gitghost
