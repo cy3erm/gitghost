@@ -1,33 +1,16 @@
-"""
-Detection rules for gitghost.
-
-Two layers:
-  1. High-confidence provider signatures (regex) — a leaked AWS key looks like
-     nothing else, so these are near-zero false positive.
-  2. Generic high-entropy strings assigned to secret-ish variable names — this
-     catches the long tail (custom tokens, DB passwords) that no signature covers.
-
-IMPORTANT: gitghost is DETECTION-ONLY. Nothing in this file, or anywhere in the
-tool, ever transmits a discovered secret to its provider to check if it is
-"live". Confirming someone else's key by authenticating with it is unauthorized
-access. We report format + entropy confidence and stop there.
-"""
-
 import hashlib
 import math
 import re
 from dataclasses import dataclass
 
 
-# severity is 1-10; it feeds the Exposure Score. A cloud root credential is a
-# categorically worse leak than a Slack webhook, and the score should say so.
 @dataclass(frozen=True)
 class Rule:
     id: str
     label: str
     pattern: re.Pattern
     severity: int
-    kind: str = "secret"          # secret | pii | infra
+    kind: str = "secret"
     remediation: str = ""
 
 
@@ -73,7 +56,7 @@ PROVIDER_RULES: list[Rule] = [
          remediation="Rotate the database password; the credential and host are both exposed."),
 ]
 
-# infra breadcrumbs — individually dull, collectively a map of someone's setup
+
 INFRA_RULES: list[Rule] = [
     Rule("internal-host", "Internal Hostname", kind="infra", severity=2,
          pattern=re.compile(r"\b[a-z0-9-]+(\.[a-z0-9-]+)*\.(internal|corp|intranet|lan)\b"),
@@ -107,34 +90,22 @@ class Finding:
     kind: str
     severity: int
     line_no: int
-    redacted: str           # what we show — never the raw secret in reports
+    redacted: str
     entropy: float = 0.0
     remediation: str = ""
-    # provenance is filled in by the scanner/ghost layer
+
     repo: str = ""
     path: str = ""
     commit: str = ""
-    is_ghost: bool = False   # True == recovered from history, gone from HEAD
-    repo_url: str = ""       # https://github.com/owner/repo, for building deep links
+    is_ghost: bool = False
+    repo_url: str = ""
 
 
-# Non-secret format prefixes. AKIA / ghp_ / sk_live_ etc. are identifiers, not
-# secret material — they appear in every key of that type — so showing them is
-# safe and helps you recognize your own leak. The entropy *after* the prefix is
-# the actual secret, and we never show that.
 _SAFE_PREFIXES = ("AKIA", "ASIA", "ghp_", "gho_", "ghu_", "ghs_", "ghr_",
                   "sk_live_", "sk-", "AIza", "xoxb-", "xoxp-", "eyJ")
 
 
 def _fingerprint(value: str) -> str:
-    """
-    A one-way summary of a finding: a safe prefix (if any), a length, and the
-    first bytes of a SHA-256. It is NOT reversible — the report never carries
-    recoverable key material, so it's safe to screenshot or paste into a PR.
-
-    To confirm a finding is a key you recognize, hash your copy and compare:
-        python3 -c "import hashlib,sys;print(hashlib.sha256(sys.argv[1].encode()).hexdigest()[:10])" 'YOUR_KEY'
-    """
     v = value.strip().strip("'\"")
     if not v:
         return ""
@@ -151,7 +122,7 @@ def scan_text(text: str) -> list[Finding]:
     findings: list[Finding] = []
     lines = text.splitlines()
     for i, line in enumerate(lines, 1):
-        if len(line) > 4000:            # skip minified blobs / lockfiles
+        if len(line) > 4000:
             continue
         matched_spans: list[tuple[int, int]] = []
         for rule in (*PROVIDER_RULES, *INFRA_RULES):
@@ -164,9 +135,8 @@ def scan_text(text: str) -> list[Finding]:
                     entropy=round(shannon_entropy(raw), 2),
                     remediation=rule.remediation,
                 ))
-        # generic entropy pass — only fires when the VALUE actually looks like a
-        # credential (dense, high-entropy), not just any code assigned to a
-        # secret-ish variable name. Skips anything a specific rule already caught.
+
+
         for m in SECRETISH_ASSIGN.finditer(line):
             val = m.group("val")
             vstart = m.start("val")
@@ -189,8 +159,6 @@ def _looks_like_placeholder(v: str) -> bool:
     return bool(_PLACEHOLDER.search(v)) or len(set(v)) <= 4
 
 
-# A code identifier / expression, not a secret: dotted access, camelCase,
-# function calls, env lookups, file paths. Real credentials don't look like this.
 _CODE_PUNCT = re.compile(r"[\s.()\[\]{}<>/\\:;,]")
 _KEYISH = re.compile(r"^[A-Za-z0-9_\-+=]+$")
 
@@ -199,12 +167,12 @@ def _looks_like_secret_value(val: str) -> bool:
     v = val.strip().strip("'\"")
     if len(v) < 20 or _looks_like_placeholder(v):
         return False
-    if _CODE_PUNCT.search(v):            # has code punctuation/paths → it's code
+    if _CODE_PUNCT.search(v):
         return False
-    if not _KEYISH.fullmatch(v):         # keys are a compact token, not an expression
+    if not _KEYISH.fullmatch(v):
         return False
     has_digit = any(c.isdigit() for c in v)
     has_alpha = any(c.isalpha() for c in v)
-    if not (has_digit and has_alpha):    # real keys mix letters and digits
+    if not (has_digit and has_alpha):
         return False
     return shannon_entropy(v) >= 3.5

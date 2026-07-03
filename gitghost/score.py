@@ -1,18 +1,3 @@
-"""
-Exposure Score: one 0–100 number, higher = more exposed. It is the hook — a
-credit-score-for-how-much-you-leak that a non-security person understands at a
-glance and instinctively wants to compare.
-
-Design goals:
-  * A single live cloud/root secret should read as Critical on its own.
-    (Intuition: "you leaked a live AWS secret key" is not a 30/100 situation.)
-  * Volume should still push the number up — 40 leaks are worse than one.
-  * It must saturate, never overflow, and degrade gracefully to Minimal on a
-    clean identity.
-
-So the score is max(worst-single-finding floor, saturating aggregate).
-"""
-
 import math
 from dataclasses import dataclass, field
 
@@ -49,28 +34,28 @@ def _band(score: int) -> tuple[str, str]:
 
 
 def compute_score(findings: list[Finding], meta: MetadataReport) -> ScoreCard:
-    meta = meta or MetadataReport()   # tolerate the all-clones-failed path
+    meta = meta or MetadataReport()
     secrets = [f for f in findings if f.kind == "secret"]
     infra = [f for f in findings if f.kind == "infra"]
     live = [f for f in secrets if not f.is_ghost]
     ghost = [f for f in secrets if f.is_ghost]
 
-    # ---- saturating aggregate ----
+
     raw = 0.0
     for f in secrets:
         raw += f.severity * (0.9 if f.is_ghost else 1.0)
     for f in infra:
         raw += f.severity * 0.5
     pii = 0
-    if meta.emails:                         # real (non-noreply) address exposed
+    if meta.emails:
         raw += 6
         pii += 1
-    if meta.dominant_utc_offset:            # timezone / rhythm inferable
+    if meta.dominant_utc_offset:
         raw += 3
         pii += 1
     aggregate = 100 * (1 - math.exp(-raw / 26))
 
-    # ---- worst-single-finding floor ----
+
     floor = 0.0
     worst_label = "—"
     if secrets:
