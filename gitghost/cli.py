@@ -107,6 +107,8 @@ def _emit(identity, card, findings, meta, repos_scanned, out):
 
 def main() -> None:
     p = argparse.ArgumentParser(prog="gitghost", description="GitHub exposure dossier (detection-only).")
+    from . import __version__
+    p.add_argument("--version", action="version", version=f"gitghost {__version__}")
     p.add_argument("identity", nargs="?", help="GitHub username or org")
     p.add_argument("--repo", help="scan a single repo by URL or owner/name")
     p.add_argument("--local", help="scan a repo already on disk instead of GitHub")
