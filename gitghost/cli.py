@@ -106,6 +106,9 @@ def main() -> None:
     p.add_argument("--out", default="gitghost-dossier.html", help="output HTML path")
     args = p.parse_args()
 
+    from .banner import print_banner
+    print_banner()
+
     if args.local:
         run_local(args.local, args.name, args.out)
     elif args.repo:
