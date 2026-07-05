@@ -6,3 +6,7 @@ gitghost-dossier.html
 dist/
 build/
 *.egg-info/
+
+dist/
+build/
+*.egg-info/
