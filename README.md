@@ -25,7 +25,7 @@ You'll need Python 3.10+ and git. There are no runtime dependencies — it's all
 Install it as a command:
 
 ```bash
-pipx install git+https://github.com/cy3erm/gitghost
+pipx install gitghost-scanner
 gitghost <username>
 ```
 
