@@ -1,9 +1,9 @@
 [build-system]
-requires = ["setuptools>=61"]
+requires = ["setuptools>=61,<77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "gitghost"
+name = "gitghost-scanner"
 dynamic = ["version"]
 description = "Find secrets in a GitHub account's public repos — including the ones still hiding in git history after being 'deleted'."
 readme = "README.md"
@@ -19,7 +19,7 @@ classifiers = [
     "Programming Language :: Python :: 3 :: Only",
     "Topic :: Security",
 ]
-dependencies = []   # standard library only
+dependencies = []
 
 [project.urls]
 Homepage = "https://github.com/cy3erm/gitghost"

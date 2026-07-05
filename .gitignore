@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 gitghost-dossier.html
 *:Zone.Identifier
+
+dist/
+build/
+*.egg-info/
