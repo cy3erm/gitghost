@@ -1,5 +1,6 @@
 # gitghost
-![gitghost exposure dossier](preview.png)
+![gitghost exposure dossier](<img width="1060" height="502" alt="image" src="https://github.com/user-attachments/assets/483e855b-6273-4aa9-9972-6cde3778daa4" />
+)
 Finds secrets in a GitHub account's public repos — including the ones that got committed, then "deleted," but are still sitting in the git history where anyone can read them.
 
 I built this after noticing how often the real leak isn't in someone's current code — it's in a commit from eight months ago that they thought they'd cleaned up. You paste an API key, catch it, delete the line, and move on. The latest version looks fine. But the old commit still has the key, and `git log` hands it to anyone who clones the repo. Most scanners only look at your current files and miss this entirely. gitghost goes digging through history for exactly those, and then rolls everything up into a single exposure score so you can actually tell how bad things are at a glance.
