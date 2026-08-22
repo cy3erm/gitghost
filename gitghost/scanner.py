@@ -11,6 +11,12 @@ SKIP_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".pdf", ".zip",
             ".min.js", ".map", ".so", ".dll", ".class", ".pyc"}
 MAX_BYTES = 2_000_000
 
+# Filenames whose mere presence signals credentials; findings inside get a
+# severity bump the way .env files already do.
+HOT_FILES = {"id_rsa", "id_dsa", "id_ed25519", ".npmrc", ".pypirc",
+             ".git-credentials", ".netrc", ".htpasswd"}
+HOT_SUFFIXES = (".pem", ".key", ".env", ".p12", ".pfx")
+
 
 @dataclass
 class RepoScan:
@@ -47,7 +53,10 @@ def scan_repo(root: str, repo_name: str) -> RepoScan:
                 f.repo = repo_name
                 f.path = rel
 
-                if os.path.basename(rel).startswith(".env") and f.kind == "secret":
-                    f.severity = min(10, f.severity + 1)
+                if f.kind == "secret":
+                    base = os.path.basename(rel)
+                    if base.startswith(".env") or base in HOT_FILES \
+                            or rel.endswith(HOT_SUFFIXES):
+                        f.severity = min(10, f.severity + 1)
                 result.findings.append(f)
     return result

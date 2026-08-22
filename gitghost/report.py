@@ -20,15 +20,33 @@ def _finding_row(f: Finding) -> str:
     tone = "ghost" if f.is_ghost else "live"
     repo_tag = f'<span class="repo">{_esc(f.repo)}</span> ' if f.repo else ""
 
+    badges = ""
+    if f.leaked_then_reused:
+        badges += '<span class="badge hot">leaked, still in use</span>'
+    elif f.reused_in:
+        badges += (f'<span class="badge">reused in {len(f.reused_in)} other '
+                   f'repo{"s" if len(f.reused_in) != 1 else ""}</span>')
+
     if f.is_ghost:
-        loc_text = _esc(f.path) if f.path else ""
-        if f.repo_url and f.commit and f.commit != "dangling":
-            commit_html = _link(f"{f.repo_url}/commit/{f.commit}", _esc(f.commit))
-        elif f.commit:
-            commit_html = f'<span class="commit">{_esc(f.commit)}</span>'
+        has_real_path = bool(f.path) and not f.path.startswith("(history)")
+        if f.repo_url and f.commit_full and has_real_path:
+            loc = _link(f"{f.repo_url}/blob/{f.commit_full}/{f.path}#L{f.line_no}",
+                        f"{_esc(f.path)}:{f.line_no}")
+        elif has_real_path:
+            loc = f"{_esc(f.path)}:{f.line_no}"
+        elif f.repo_url and f.commit and f.commit != "dangling":
+            loc = _link(f"{f.repo_url}/commit/{f.commit}", _esc(f.commit))
         else:
-            commit_html = ""
-        loc = f"{loc_text} {commit_html}"
+            loc = _esc(f.path) if f.path else ""
+        if f.entered_date:
+            loc += f' <span class="age">entered {f.entered_date}</span>'
+        if f.exposed_days is not None:
+            days = f.exposed_days
+            span = f"{days // 365}y{days % 365}d" if days >= 365 else f"{days}d"
+            loc += f' <span class="age">exposed {span}</span>'
+        ctx = " · ".join(x for x in (_esc(f.commit_author), _esc(f.commit_message)) if x)
+        if ctx:
+            loc += f'<div class="rem">"{ctx}"</div>'
     else:
         pathline = f"{_esc(f.path)}:{f.line_no}"
         if f.repo_url and f.path:
@@ -40,7 +58,7 @@ def _finding_row(f: Finding) -> str:
     return f"""
       <tr class="frow {tone}">
         <td class="sev"><span class="sev-dot s{f.severity}">{f.severity}</span></td>
-        <td class="lbl">{_esc(f.label)}</td>
+        <td class="lbl">{_esc(f.label)}{badges}</td>
         <td class="val"><code class="redaction">{_esc(f.redacted)}</code></td>
         <td class="loc">{repo_tag}{loc}<div class="rem">{_esc(f.remediation)}</div></td>
       </tr>"""
@@ -187,6 +205,11 @@ def render_report(identity: str, card: ScoreCard, findings: list[Finding],
     font-family:'Space Mono',monospace; font-size:12.5px; padding:8px 12px; overflow-x:auto; }}
   .repo {{ display:inline-block; background:var(--ink); color:var(--paper);
     font-family:'Space Mono',monospace; font-size:11px; padding:1px 6px; margin-right:6px; }}
+  .badge {{ display:inline-block; border:1px solid var(--ghost); color:var(--ghost);
+    font-family:'Space Mono',monospace; font-size:10px; padding:0 5px;
+    margin-left:6px; text-transform:uppercase; letter-spacing:.08em; vertical-align:middle; }}
+  .badge.hot {{ border-color:var(--hazard); color:var(--hazard); }}
+  .age {{ color:var(--ghost); }}
   .loc a {{ color:var(--ink); text-decoration:underline; text-underline-offset:2px; }}
   .frow.ghost .loc a {{ color:var(--ghost); }}
   .rem {{ margin-top:6px; font-family:'Archivo',sans-serif; font-size:13px; color:var(--ink); max-width:52ch; }}

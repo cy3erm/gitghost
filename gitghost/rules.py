@@ -1,7 +1,7 @@
 import hashlib
 import math
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -54,6 +54,39 @@ PROVIDER_RULES: list[Rule] = [
     Rule("db-connection", "Database Connection String",
          re.compile(r"\b(postgres|postgresql|mysql|mongodb(\+srv)?|redis)://[^\s:@/]+:[^\s:@/]+@[^\s/]+"), 8,
          remediation="Rotate the database password; the credential and host are both exposed."),
+    Rule("anthropic-key", "Anthropic API Key",
+         re.compile(r"\bsk-ant-[A-Za-z0-9_-]{24,}\b"), 8,
+         remediation="Revoke the key in the Anthropic console; you are billed for its usage."),
+    Rule("npm-token", "npm Publish Token",
+         re.compile(r"\bnpm_[A-Za-z0-9]{36}\b"), 8,
+         remediation="Revoke the token at npmjs.com > Access Tokens; it can publish packages as you."),
+    Rule("pypi-token", "PyPI Upload Token",
+         re.compile(r"\bpypi-[A-Za-z0-9_-]{40,}\b"), 7,
+         remediation="Revoke the token on pypi.org; it can upload packages under your project."),
+    Rule("telegram-bot", "Telegram Bot Token",
+         re.compile(r"\b\d{8,10}:AA[A-Za-z0-9_-]{33}\b"), 6,
+         remediation="Revoke the token via @BotFather (/revoke); anyone holding it controls the bot."),
+    Rule("discord-webhook", "Discord Webhook URL",
+         re.compile(r"https://discord(app)?\.com/api/webhooks/\d{15,}/[A-Za-z0-9_-]+"), 5,
+         remediation="Delete the webhook; anyone with the URL can post to the channel."),
+    Rule("discord-bot", "Discord Bot Token",
+         re.compile(r"\b[MN][A-Za-z0-9_-]{23}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27}\b"), 7,
+         remediation="Reset the token in the Discord developer portal and redeploy the bot."),
+    Rule("sendgrid-key", "SendGrid API Key",
+         re.compile(r"\bSG\.[A-Za-z0-9_-]{16,32}\.[A-Za-z0-9_-]{16,64}\b"), 7,
+         remediation="Delete the key in SendGrid settings; leaked keys are used for phishing spam."),
+    Rule("mailgun-key", "Mailgun API Key",
+         re.compile(r"\bkey-[0-9a-zA-Z]{32}\b"), 5,
+         remediation="Rotate the key in the Mailgun control panel."),
+    Rule("twilio-key", "Twilio API Key",
+         re.compile(r"\bSK[0-9a-f]{32}\b"), 4,
+         remediation="Rotate the key in the Twilio console and check usage for anomalies."),
+    Rule("azure-storage", "Azure Storage Account Key",
+         re.compile(r"AccountKey=[A-Za-z0-9+/=]{60,}"), 8,
+         remediation="Regenerate the storage account key and move to SAS tokens or managed identity."),
+    Rule("huggingface-token", "Hugging Face Token",
+         re.compile(r"\bhf_[A-Za-z0-9]{34}\b"), 6,
+         remediation="Revoke the token at huggingface.co/settings/tokens."),
 ]
 
 
@@ -100,16 +133,33 @@ class Finding:
     is_ghost: bool = False
     repo_url: str = ""
 
+    fingerprint: str = ""
+    commit_author: str = ""
+    commit_message: str = ""
+    commit_full: str = ""
+    entered_date: str = ""
+    exposed_days: int | None = None
+    reused_in: list[str] = field(default_factory=list)
+    leaked_then_reused: bool = False
+
 
 _SAFE_PREFIXES = ("AKIA", "ASIA", "ghp_", "gho_", "ghu_", "ghs_", "ghr_",
-                  "sk_live_", "sk-", "AIza", "xoxb-", "xoxp-", "eyJ")
+                  "sk_live_", "sk-ant-", "sk-", "AIza", "xoxb-", "xoxp-",
+                  "npm_", "pypi-", "SG.", "hf_", "shpat_", "dop_v1_", "eyJ")
+
+
+def _digest(value: str) -> str:
+    v = value.strip().strip("'\"")
+    if not v:
+        return ""
+    return hashlib.sha256(v.encode("utf-8", "ignore")).hexdigest()[:10]
 
 
 def _fingerprint(value: str) -> str:
     v = value.strip().strip("'\"")
     if not v:
         return ""
-    digest = hashlib.sha256(v.encode("utf-8", "ignore")).hexdigest()[:10]
+    digest = _digest(value)
     prefix = ""
     for p in _SAFE_PREFIXES:
         if v.startswith(p):
@@ -132,6 +182,7 @@ def scan_text(text: str) -> list[Finding]:
                 findings.append(Finding(
                     rule_id=rule.id, label=rule.label, kind=rule.kind,
                     severity=rule.severity, line_no=i, redacted=_fingerprint(raw),
+                    fingerprint=_digest(raw),
                     entropy=round(shannon_entropy(raw), 2),
                     remediation=rule.remediation,
                 ))
@@ -146,6 +197,7 @@ def scan_text(text: str) -> list[Finding]:
                     rule_id="generic-high-entropy",
                     label="High-Entropy Secret (generic)", kind="secret",
                     severity=5, line_no=i, redacted=_fingerprint(val),
+                    fingerprint=_digest(val),
                     entropy=round(shannon_entropy(val), 2),
                     remediation="Confirm whether this is a real credential; if so rotate and move it to a secret manager.",
                 ))
