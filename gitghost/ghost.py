@@ -100,17 +100,33 @@ _VENDOR = re.compile(r"(^|/)(node_modules|vendor|dist|build|\.next|bower_compone
                      r"\.min\.js|\.min\.css|\.map)$", re.I)
 
 
+# Git's %ci looks like "2024-01-01 12:00:00 -0700" — an offset without a
+# colon, which datetime.fromisoformat rejects before Python 3.11. Parse it
+# explicitly so exposure age works on every supported version.
+_GIT_TIME = re.compile(
+    r"^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})\s*([+-]\d{2}):?(\d{2})$")
+
+
+def _parse_git_time(raw: str) -> datetime | None:
+    m = _GIT_TIME.match(raw.strip())
+    if not m:
+        return None
+    try:
+        return datetime.fromisoformat(f"{m[1]}T{m[2]}{m[3]}:{m[4]}")
+    except ValueError:
+        return None
+
+
 def _introducing_commit(root: str, blob: str) -> dict | None:
     out = _git(root, "log", "--all", "--reverse",
                "--format=%H|%ci|%an|%s", "--find-object", blob)
     for line in out.splitlines():
         parts = line.split("|", 3)
         if len(parts) == 4 and len(parts[0]) == 40:
-            try:
-                when = datetime.fromisoformat(parts[1].strip())
+            when = _parse_git_time(parts[1])
+            days = None
+            if when is not None:
                 days = max(0, (datetime.now(timezone.utc) - when).days)
-            except ValueError:
-                days = None
             return {
                 "sha": parts[0][:10],
                 "sha_full": parts[0],
