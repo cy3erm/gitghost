@@ -168,6 +168,9 @@ def _fingerprint(value: str) -> str:
     return f"{prefix}{len(v)} chars · fp:{digest}"
 
 
+ALL_RULES: tuple[Rule, ...] = (*PROVIDER_RULES, *INFRA_RULES)
+
+
 def scan_text(text: str) -> list[Finding]:
     findings: list[Finding] = []
     lines = text.splitlines()
@@ -175,7 +178,7 @@ def scan_text(text: str) -> list[Finding]:
         if len(line) > 4000:
             continue
         matched_spans: list[tuple[int, int]] = []
-        for rule in (*PROVIDER_RULES, *INFRA_RULES):
+        for rule in ALL_RULES:
             for m in rule.pattern.finditer(line):
                 raw = m.group(0)
                 matched_spans.append(m.span())

@@ -73,6 +73,8 @@ def render_report(identity: str, card: ScoreCard, findings: list[Finding],
 
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     angle = _BAND_ANGLE.get(card.band, -6)
+    # "org:acme" and local-scan labels shouldn't render with an "@" prefix
+    subject = _esc(identity[4:] if identity.startswith("org:") else identity)
 
     meter_pct = card.score
     drivers = "".join(f"<li>{_esc(d)}</li>" for d in card.drivers) or "<li>Nothing notable surfaced. Rare, and good.</li>"
@@ -235,7 +237,7 @@ def render_report(identity: str, card: ScoreCard, findings: list[Finding],
   <div class="hero">
     <div>
       <div class="target-eyebrow">Subject of report</div>
-      <div class="target">@<span>{_esc(identity)}</span></div>
+      <div class="target">@<span>{subject}</span></div>
       <div class="scope">Public repositories only. Detection-only: no discovered
       credential was ever tested against its provider.</div>
     </div>

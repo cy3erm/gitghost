@@ -38,9 +38,16 @@ A few other flags:
 ```bash
 python3 -m gitghost <username> --limit 50        # cap how many repos
 python3 -m gitghost <username> --out report.html # where to write the report
+python3 -m gitghost <username> --network         # also crawl followers/following
+python3 -m gitghost --org acme                   # scan an org's public repos
+python3 -m gitghost --org acme --members         # ...plus every public member
 python3 -m gitghost --local ./some-repo          # scan a checkout you have locally
 python3 -m gitghost --repo owner/name            # scan just one repo (URL or owner/name)
+python3 -m gitghost <username> --no-gists        # skip gist scanning
+python3 -m gitghost <username> --jobs 8          # parallel clones/scans (default 4)
 ```
+
+Every mode writes an HTML dossier (default `gitghost-dossier.html`, change with `--out`). If something goes wrong unexpectedly, re-run with `--debug` for the full traceback. Output respects `NO_COLOR`. Run `gitghost --help` for the full list with defaults.
 
 Scanning more than a couple of accounts? Set `GITHUB_TOKEN` (any token works, it doesn't need any scopes) so you don't run into GitHub's 60-requests-an-hour limit for anonymous calls.
 
@@ -53,9 +60,9 @@ Scanning more than a couple of accounts? Set `GITHUB_TOKEN` (any token works, it
 
 The score is deliberately one number so you can watch it move — run it, clean things up, run it again. A single live cloud key is enough to put an account in the red by itself; a pile of smaller stuff pushes it up from there.
 
-## Where it draws the line
+## Where it draws the line (legal & ethics)
 
-It only ever reads public repositories — things the account already chose to publish — and it's detection-only. It'll tell you a string *looks like* a credential and leave it at that. It won't try the key against the actual service to see if it still works, because quietly logging into someone else's account isn't the tool's job, and honestly it's not yours either. Findings in the report are shown as fingerprints, not the raw values, so you can share a report without leaking anything.
+It only ever reads public repositories — things the account already chose to publish — and it's detection-only. It'll tell you a string *looks like* a credential and leave it at that. It won't try the key against the actual service to see if it still works, because quietly logging into someone else's account isn't the tool's job, and honestly it's not yours either. Use it on your own identity, or one you're authorized to assess. Findings in the report are shown as fingerprints, not the raw values, so you can share a report without leaking anything.
 
 Point it at yourself first. Most people turn up at least one thing they'd completely forgotten about — I did. (The first time I pushed this repo, GitHub's own secret scanner blocked me because the demo's fake keys looked real enough to trip it. Which is about the best proof of the premise I could ask for.)
 
