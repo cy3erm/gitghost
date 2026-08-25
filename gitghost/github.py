@@ -114,6 +114,11 @@ class Gist:
     description: str
     html_url: str
     files: dict  # name -> {raw_url, ...}
+    history: list = None  # [{url, version, committed_at}, ...] edit revisions
+
+    def __post_init__(self):
+        if self.history is None:
+            self.history = []
 
 
 def list_public_gists(identity: str, limit: int = 100) -> list[Gist]:
@@ -122,10 +127,95 @@ def list_public_gists(identity: str, limit: int = 100) -> list[Gist]:
         gists.append(Gist(
             id=d["id"], description=d.get("description") or "",
             html_url=d.get("html_url", ""), files=d.get("files", {}),
+            history=d.get("history") or [],
         ))
         if len(gists) >= limit:
             break
     return gists
+
+
+def get_gist(gist_id: str) -> Gist:
+    """Fetch a single gist with its full revision history."""
+    d = _get(f"{API}/gists/{gist_id}")
+    return Gist(
+        id=d["id"], description=d.get("description") or "",
+        html_url=d.get("html_url", ""), files=d.get("files", {}),
+        history=d.get("history") or [],
+    )
+
+
+def get_gist_revision(gist_id: str, rev_sha: str) -> dict:
+    """Files of a gist at a specific revision (same shape as a gist object)."""
+    return _get(f"{API}/gists/{gist_id}/{rev_sha}")
+
+
+def parse_push_commits(events: list) -> dict[str, list[tuple[str, str]]]:
+    """Extract (commit_sha, pushed_at) per repo from public PushEvents.
+
+    These payloads keep the SHAs of commits that were later force-pushed
+    away — the repo clone no longer contains them, but GitHub still serves
+    the objects when fetched by SHA.
+    """
+    pushed: dict[str, list[tuple[str, str]]] = {}
+    for e in events:
+        if not isinstance(e, dict) or e.get("type") != "PushEvent":
+            continue
+        full_name = (e.get("repo") or {}).get("name", "")
+        when = (e.get("created_at") or "")[:10]
+        for c in (e.get("payload") or {}).get("commits") or []:
+            sha = c.get("sha")
+            if sha and full_name:
+                pushed.setdefault(full_name, []).append((sha, when))
+    return pushed
+
+
+def list_public_events(identity: str, pages: int = 3) -> list:
+    """Recent public activity (the API keeps ~90 days)."""
+    events: list = []
+    for page in range(1, pages + 1):
+        data = _get(f"{API}/users/{identity}/events/public?per_page=100&page={page}")
+        if not isinstance(data, list) or not data:
+            break
+        events += data
+    return events
+
+
+def collect_pushed_commits(identity: str) -> dict[str, list[tuple[str, str]]]:
+    """All commit SHAs this user recently pushed, grouped by owner/repo."""
+    try:
+        return parse_push_commits(list_public_events(identity))
+    except GitHubError:
+        return {}
+
+
+@dataclass
+class Profile:
+    login: str
+    name: str = ""
+    company: str = ""
+    blog: str = ""
+    location: str = ""
+    email: str = ""
+    twitter: str = ""
+    created_at: str = ""
+    followers: int = 0
+    public_repos: int = 0
+
+
+def get_user(identity: str) -> Profile:
+    d = _get(f"{API}/users/{identity}")
+    return Profile(
+        login=d.get("login", identity),
+        name=d.get("name") or "",
+        company=d.get("company") or "",
+        blog=d.get("blog") or "",
+        location=d.get("location") or "",
+        email=d.get("email") or "",
+        twitter=d.get("twitter_username") or "",
+        created_at=(d.get("created_at") or "")[:10],
+        followers=d.get("followers") or 0,
+        public_repos=d.get("public_repos") or 0,
+    )
 
 
 def fetch_gist_file(raw_url: str) -> str | None:

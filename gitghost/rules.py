@@ -200,6 +200,7 @@ class Finding:
     path: str = ""
     commit: str = ""
     is_ghost: bool = False
+    force_pushed: bool = False
     repo_url: str = ""
 
     fingerprint: str = ""

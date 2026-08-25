@@ -138,6 +138,89 @@ def _introducing_commit(root: str, blob: str) -> dict | None:
     return None
 
 
+def _commit_meta(root: str, sha: str) -> dict:
+    out = _git(root, "show", "-s", "--format=%H|%ci|%s", sha)
+    for line in out.splitlines():
+        parts = line.split("|", 2)
+        if len(parts) == 3 and len(parts[0]) == 40:
+            when = _parse_git_time(parts[1])
+            days = None
+            if when is not None:
+                days = max(0, (datetime.now(timezone.utc) - when).days)
+            return {
+                "sha": parts[0][:10], "sha_full": parts[0],
+                "date": parts[1].strip()[:10],
+                "subject": parts[2].strip(), "days_exposed": days,
+            }
+    return {"sha": sha[:10], "sha_full": sha, "date": "", "subject": "",
+            "days_exposed": None}
+
+
+def recover_force_pushed(root: str, shas: list[str], repo_name: str,
+                         max_commits: int = 30) -> list[Finding]:
+    """Scan commits that are no longer reachable from any ref.
+
+    Force-push a secret away and no clone contains it — but if we know the
+    commit SHA (e.g. from the Events API), GitHub still serves the object.
+    Fetch each SHA into the clone, then scan its tree for blobs that are not
+    in HEAD, i.e. exactly the files the force-push tried to bury.
+    """
+    ghosts: list[Finding] = []
+    seen_fp: set[tuple] = set()
+
+    head = _head_blobs(root)
+    batch = None
+    try:
+        for sha in shas[:max_commits]:
+            # object already in the clone? if not, ask GitHub for it by SHA
+            if not _commit_exists(root, sha):
+                _git(root, "fetch", "--quiet", "--force", "origin", sha)
+            if not _commit_exists(root, sha):
+                continue  # gone from the server too (GC'd or never public)
+
+            meta = _commit_meta(root, sha)
+            tree: list[tuple[str, str]] = []
+            for line in _git(root, "ls-tree", "-r", meta["sha_full"]).splitlines():
+                parts = line.split(maxsplit=3)
+                if len(parts) == 4 and parts[1] == "blob":
+                    path = parts[3].strip()
+                    if _VENDOR.search(path):
+                        continue
+                    tree.append((parts[2], path))
+
+            if batch is None:
+                batch = _BatchReader(root)
+            for blob, path in tree:
+                if blob in head:
+                    continue  # live in HEAD; already covered by the file scan
+                raw = batch.get(blob)
+                if not raw:
+                    continue
+                for f in scan_text(raw.decode("utf-8", errors="ignore")):
+                    key = (f.rule_id, f.fingerprint)
+                    if key in seen_fp:
+                        continue
+                    seen_fp.add(key)
+                    f.repo = repo_name
+                    f.path = path
+                    f.is_ghost = True
+                    f.force_pushed = True
+                    f.commit = meta["sha"]
+                    f.commit_full = meta["sha_full"]
+                    f.commit_message = meta["subject"]
+                    f.entered_date = meta["date"]
+                    f.exposed_days = meta["days_exposed"]
+                    ghosts.append(f)
+    finally:
+        if batch is not None:
+            batch.close()
+    return ghosts
+
+
+def _commit_exists(root: str, sha: str) -> bool:
+    return bool(_git(root, "cat-file", "-t", sha).strip())
+
+
 def recover_ghosts(root: str, repo_name: str, max_blobs: int = 4000) -> list[Finding]:
     head = _head_blobs(root)
     ghosts: list[Finding] = []

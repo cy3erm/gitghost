@@ -124,6 +124,9 @@ def compute_score(findings: list[Finding], meta: MetadataReport) -> ScoreCard:
         drivers.append(f"{len(live)} live secret{'s' if len(live) != 1 else ''} in current code")
     if ghost:
         drivers.append(f"{len(ghost)} 'deleted' secret{'s' if len(ghost) != 1 else ''} still recoverable from history")
+    forced = [f for f in ghost if f.force_pushed]
+    if forced:
+        drivers.append(f"{len(forced)} secret{'s' if len(forced) != 1 else ''} removed by force-push still fetchable by SHA")
     if leaked_reused:
         drivers.append("a 'deleted' secret still matches one live in current code")
     if reused:

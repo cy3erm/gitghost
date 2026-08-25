@@ -21,6 +21,8 @@ def _finding_row(f: Finding) -> str:
     repo_tag = f'<span class="repo">{_esc(f.repo)}</span> ' if f.repo else ""
 
     badges = ""
+    if f.force_pushed:
+        badges += '<span class="badge hot">removed via force-push</span>'
     if f.leaked_then_reused:
         badges += '<span class="badge hot">leaked, still in use</span>'
     elif f.reused_in:
@@ -65,7 +67,8 @@ def _finding_row(f: Finding) -> str:
 
 
 def render_report(identity: str, card: ScoreCard, findings: list[Finding],
-                  meta: MetadataReport, repos_scanned: int) -> str:
+                  meta: MetadataReport, repos_scanned: int,
+                  profile=None) -> str:
     live = sorted((f for f in findings if f.kind == "secret" and not f.is_ghost),
                   key=lambda f: -f.severity)
     ghosts = sorted((f for f in findings if f.is_ghost), key=lambda f: -f.severity)
@@ -111,10 +114,21 @@ def render_report(identity: str, card: ScoreCard, findings: list[Finding],
         </section>"""
 
     emails = ", ".join(_esc(e) for e in meta.emails[:3]) or "none exposed"
+    if profile is not None:
+        who = " · ".join(x for x in (profile.name, profile.company, profile.location) if x) or "—"
+        contact = " · ".join(x for x in (profile.email, profile.blog, profile.twitter) if x) or "—"
+        since = profile.created_at or "—"
+        profile_cells = f"""
+        <div class="meta-cell"><div class="mk">Who</div><div class="mv">{_esc(who)}</div></div>
+        <div class="meta-cell"><div class="mk">Contact</div><div class="mv">{_esc(contact)}</div></div>
+        <div class="meta-cell"><div class="mk">On GitHub since</div><div class="mv">{_esc(since)}</div></div>
+        <div class="meta-cell"><div class="mk">Followers / repos</div><div class="mv">{profile.followers} / {profile.public_repos}</div></div>"""
+    else:
+        profile_cells = ""
     meta_section = f"""
     <section class="block">
       <div class="block-head"><span class="eyebrow">What your commits reveal about you</span></div>
-      <div class="meta-grid">
+      <div class="meta-grid">{profile_cells}
         <div class="meta-cell"><div class="mk">Author email</div><div class="mv">{emails}</div></div>
         <div class="meta-cell"><div class="mk">Timezone (inferred)</div><div class="mv">{_esc(meta.dominant_utc_offset or '—')}</div></div>
         <div class="meta-cell"><div class="mk">Active hours (inferred)</div><div class="mv">{_esc(meta.likely_active_hours or '—')}</div></div>

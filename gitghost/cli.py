@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from . import __version__, github
 from .banner import print_banner
-from .ghost import recover_ghosts
+from .ghost import recover_force_pushed, recover_ghosts
 from .metadata import MetadataReport, analyze_metadata
 from .report import render_report
 from .rules import Finding, scan_text
@@ -22,8 +22,9 @@ def _scan_one(root: str, name: str) -> tuple[list[Finding], MetadataReport]:
 
 
 def _write_report(identity: str, card: ScoreCard, findings: list[Finding],
-                  meta: MetadataReport | None, repos_scanned: int, out: str) -> None:
-    html = render_report(identity, card, findings, meta, repos_scanned)
+                  meta: MetadataReport | None, repos_scanned: int, out: str,
+                  profile: github.Profile | None = None) -> None:
+    html = render_report(identity, card, findings, meta, repos_scanned, profile=profile)
     try:
         with open(out, "w", encoding="utf-8") as f:
             f.write(html)
@@ -33,8 +34,9 @@ def _write_report(identity: str, card: ScoreCard, findings: list[Finding],
 
 
 def _finish(identity: str, card: ScoreCard, findings: list[Finding],
-            meta: MetadataReport | None, repos_scanned: int, out: str) -> None:
-    _write_report(identity, card, findings, meta, repos_scanned, out)
+            meta: MetadataReport | None, repos_scanned: int, out: str,
+            profile: github.Profile | None = None) -> None:
+    _write_report(identity, card, findings, meta, repos_scanned, out, profile=profile)
     print()
     ok(f"exposure score: {card.score}/100  [{card.band}, grade {card.grade}]")
     for d in card.drivers:
@@ -70,17 +72,27 @@ def run_repo(url: str, out: str) -> None:
         _finish(repo.full_name, card, findings, meta, 1, out)
 
 
-def _scan_repos(repos: list[github.Repo],
-                jobs: int) -> tuple[list[Finding], list[MetadataReport]]:
-    """Clone + scan a batch of repos in parallel; returns findings and metas."""
+def _scan_repos(repos: list[github.Repo], jobs: int,
+                push_shas: dict[str, list[tuple[str, str]]] | None = None,
+                ) -> tuple[list[Finding], list[MetadataReport]]:
+    """Clone + scan a batch of repos in parallel; returns findings and metas.
+
+    `push_shas` maps owner/repo -> [(commit_sha, pushed_at), ...] from the
+    user's recent PushEvents; those SHAs are fetched and scanned even when
+    a force-push removed them from the branch history.
+    """
     all_findings: list[Finding] = []
     metas: list[MetadataReport] = []
+    push_shas = push_shas or {}
 
     def work(repo: github.Repo):
         dest = github.clone(repo, tmp)
         if not dest:
             return repo, None
         f, m = _scan_one(dest, repo.name)
+        orphans = push_shas.get(repo.full_name)
+        if orphans:
+            f += recover_force_pushed(dest, [s for s, _ in orphans], repo.name)
         for finding in f:
             finding.repo_url = repo.html_url
         return repo, (f, m)
@@ -97,13 +109,20 @@ def _scan_repos(repos: list[github.Repo],
                 metas.append(m)
                 live = len([x for x in f if x.kind == "secret" and not x.is_ghost])
                 ghost = len([x for x in f if x.is_ghost])
+                forced = len([x for x in f if x.force_pushed])
                 tag = f"{live} live / {ghost} ghost"
+                if forced:
+                    tag += f" / {forced} force-pushed"
                 detail(f"{repo.name:<32} {tag}")
     return all_findings, metas
 
 
 def _scan_gists(identity: str) -> list[Finding]:
-    """Pull every public gist of an identity and scan the raw file contents."""
+    """Pull every public gist of an identity and scan the raw file contents.
+
+    Also walks each gist's revision history: secrets that were edited out of
+    a gist stay readable at their old revision URLs — gist ghosts.
+    """
     try:
         gists = github.list_public_gists(identity)
     except github.GitHubError as e:
@@ -111,25 +130,65 @@ def _scan_gists(identity: str) -> list[Finding]:
         return []
     findings: list[Finding] = []
     for g in gists:
-        for fname, meta in g.files.items():
-            raw_url = (meta or {}).get("raw_url")
-            if not raw_url:
+        current_fps = _scan_gist_files(g.files, g, findings)
+        # revisions older than the current version may hold deleted secrets
+        revs = [h for h in (g.history or [])
+                if isinstance(h, dict) and h.get("version")]
+        if not revs and g.history == [] and g.files:
+            try:  # list endpoint omitted history — fetch the full gist once
+                revs = [h for h in (github.get_gist(g.id).history or [])
+                        if isinstance(h, dict) and h.get("version")]
+            except github.GitHubError:
+                revs = []
+        for h in revs[1:]:  # history is newest-first; [0] is the current version
+            try:
+                rev = github.get_gist_revision(g.id, h["version"])
+            except github.GitHubError:
                 continue
-            text = github.fetch_gist_file(raw_url)
-            if not text:
-                continue
-            for f in scan_text(text):
-                f.repo = f"gist:{g.id}"
-                f.path = fname
-                f.repo_url = g.html_url
-                if fname.startswith(".env") or fname in HOT_FILES:
-                    f.severity = min(10, f.severity + 1)
+            when = (h.get("committed_at") or "")[:10]
+            for f in _scan_gist_files(rev.get("files", {}), g, findings,
+                                      revision=h["version"], when=when):
+                if f.fingerprint in current_fps:
+                    continue  # never actually deleted
+                f.is_ghost = True
+                f.entered_date = f.entered_date or when
                 findings.append(f)
     return findings
 
 
+def _scan_gist_files(files: dict, g: github.Gist, findings: list[Finding],
+                     revision: str = "", when: str = "") -> set[str]:
+    """Scan one gist file-map; returns fingerprints found (for dedupe)."""
+    seen: set[str] = set()
+    label = f"gist:{g.id}" + (f"/{revision[:7]}" if revision else "")
+    for fname, meta in files.items():
+        raw_url = (meta or {}).get("raw_url")
+        if not raw_url:
+            continue
+        text = github.fetch_gist_file(raw_url)
+        if not text:
+            continue
+        for f in scan_text(text):
+            f.repo = label
+            f.path = fname
+            f.repo_url = g.html_url
+            f.entered_date = when
+            if fname.startswith(".env") or fname in HOT_FILES:
+                f.severity = min(10, f.severity + 1)
+            seen.add(f.fingerprint)
+            findings.append(f)
+    return seen
+
+
 def run_identity(identity: str, limit: int, out: str, jobs: int = 4,
                  gists: bool = True, network: bool = False) -> None:
+    profile = None
+    try:
+        profile = github.get_user(identity)
+        _show_profile(profile)
+    except github.GitHubError:
+        pass  # profile is enrichment; never block the scan on it
+
     info(f"enumerating public repos for @{identity} ...")
     try:
         repos = github.list_public_repos(identity, limit=limit)
@@ -137,6 +196,13 @@ def run_identity(identity: str, limit: int, out: str, jobs: int = 4,
         graph = github.list_network(identity)[:50] if network else []
     except github.GitHubError as e:
         die(f"GitHub API error: {e}")
+
+    info("checking recent push events for force-pushed-away commits ...")
+    push_shas = github.collect_pushed_commits(identity)
+    if push_shas:
+        total = sum(len(v) for v in push_shas.values())
+        info(f"{total} recent commit(s) across {len(push_shas)} repo(s) "
+             "will be checked for force-pushed secrets")
 
     if not repos:
         if not gists and not graph:
@@ -148,7 +214,7 @@ def run_identity(identity: str, limit: int, out: str, jobs: int = 4,
     if repos:
         info(f"{len(repos)} repos. cloning + scanning in parallel "
              "(history included for ghost recovery) ...")
-        all_findings, metas = _scan_repos(repos, jobs)
+        all_findings, metas = _scan_repos(repos, jobs, push_shas=push_shas)
     else:
         all_findings, metas = [], []
     repos_scanned = len(repos)
@@ -161,7 +227,7 @@ def run_identity(identity: str, limit: int, out: str, jobs: int = 4,
         repos_scanned += ncrawled
 
     if gists:
-        info(f"crawling public gists of @{identity} ...")
+        info(f"crawling public gists of @{identity} (including revision history) ...")
         gist_findings = _scan_gists(identity)
         if gist_findings:
             ok(f"{len(gist_findings)} finding(s) recovered from gists")
@@ -169,7 +235,23 @@ def run_identity(identity: str, limit: int, out: str, jobs: int = 4,
 
     merged = merge_metas(metas)
     card = compute_score(all_findings, merged)
-    _finish(identity, card, all_findings, merged, repos_scanned, out)
+    merged = merge_metas(metas)
+    card = compute_score(all_findings, merged)
+    _finish(identity, card, all_findings, merged, repos_scanned, out,
+            profile=profile)
+
+
+def _show_profile(p: github.Profile) -> None:
+    bits = [b for b in (p.name, p.company, p.location) if b]
+    if bits:
+        detail("profile: " + " · ".join(bits))
+    for label, val in (("blog", p.blog), ("profile email", p.email),
+                       ("twitter", "@" + p.twitter if p.twitter else "")):
+        if val:
+            detail(f"{label}: {val}")
+    if p.created_at:
+        detail(f"on GitHub since {p.created_at} · {p.followers} followers · "
+               f"{p.public_repos} public repos")
 
 
 def _scan_identities(logins: list[str], limit: int, jobs: int,

@@ -16,10 +16,12 @@ I built this after noticing how often the real leak isn't in someone's current c
 ## Highlights
 
 - **Ghost recovery** — walks the full git history of every repo (including unreachable objects) to recover secrets that were removed from HEAD but never purged
+- **Force-push recovery** — even if you rewrote history, your recent push events still list the orphaned commit SHAs; gitghost fetches those commits by SHA and scans what the force-push tried to bury
+- **Gist revision history** — secrets you edited out of a gist stay readable at old revision URLs; gitghost scans every revision and flags the ones that were "deleted"
 - **40+ credential formats** — AWS, GCP, GitHub, OpenAI, Anthropic, Stripe, Slack, Google, Azure, Telegram, Discord, Notion, Shopify, Vault, Postman, Square, and many more (full list below)
 - **Generic high-entropy detection** — catches secrets that don't match any known format, with false-positive filtering tuned against real codebases
 - **Exposure score (0–100)** — one number that weights severity, age of the leak, cross-repo reuse, and whether a "deleted" secret is *still in use* somewhere
-- **Metadata leaks** — the author email in your commits, plus inferred timezone and working hours
+- **Metadata leaks** — the author email in your commits, plus inferred timezone and working hours; profile enrichment pulls public name, company, location, blog, and account age
 - **HTML dossier output** — every finding links to the exact file+line or commit; findings are shown as irreversible fingerprints so reports are safe to share
 - **Interactive console** or one-shot CLI — your choice
 - **Zero dependencies** — pure Python 3.10+ standard library

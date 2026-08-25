@@ -126,7 +126,7 @@ def test_no_redos_on_long_input():
     assert time.time() - start < 2.0, "scan_text is pathologically slow (possible ReDoS)"
 
 
-# ---- ghost recovery: a deleted secret is still found in history ----
+# ---- force-push recovery: commits removed from refs are still scannable ----
 
 def _run(cmd, cwd):
     subprocess.run(cmd, cwd=cwd, check=True, capture_output=True)
@@ -150,6 +150,59 @@ def test_ghost_recovers_deleted_secret():
         labels = [g.label for g in ghosts]
         assert "AWS Access Key ID" in labels, "did not recover the deleted key from history"
         assert all(g.is_ghost for g in ghosts)
+
+
+def test_force_pushed_commit_is_recovered_by_sha():
+    """The force-push scenario: a commit no longer reachable from any ref.
+
+    The clone never sees it; recovery must work from the bare SHA alone —
+    exactly what the Events API hands us.
+    """
+    from gitghost.ghost import recover_force_pushed
+    with tempfile.TemporaryDirectory() as d:
+        _run(["git", "init", "-q", "-b", "main"], d)
+        _run(["git", "config", "user.email", "a@b.c"], d)
+        _run(["git", "config", "user.name", "t"], d)
+        secret_file = Path(d) / "creds.txt"
+        secret_file.write_text('token = "ghp_' + "B" * 36 + '"\n')
+        _run(["git", "add", "-A"], d)
+        _run(["git", "commit", "-qm", "oops"], d)
+        orphan = subprocess.run(
+            ["git", "-C", d, "rev-parse", "HEAD"],
+            capture_output=True, text=True).stdout.strip()
+        # simulate a force-push: orphan the branch, then delete the old ref
+        _run(["git", "checkout", "-q", "--orphan", "clean"], d)
+        _run(["git", "rm", "-rqf", "."], d)
+        _run(["git", "commit", "-qm", "clean root", "--allow-empty"], d)
+        _run(["git", "branch", "-qD", "main"], d)
+
+        ghosts = recover_force_pushed(d, [orphan], "t")
+        labels = [g.label for g in ghosts]
+        assert "GitHub Personal Access Token" in labels, \
+            "did not recover the force-pushed-away secret from its SHA"
+        assert all(g.force_pushed and g.is_ghost for g in ghosts)
+        assert ghosts[0].path == "creds.txt"
+
+
+def test_parse_push_commits_extracts_shas_per_repo():
+    from gitghost.github import parse_push_commits
+    events = [
+        {"type": "WatchEvent"},  # ignored
+        {"type": "PushEvent",
+         "repo": {"name": "octocat/repo1"},
+         "created_at": "2026-08-01T10:00:00Z",
+         "payload": {"commits": [{"sha": "a" * 40}, {"sha": "b" * 40}]}},
+        {"type": "PushEvent",
+         "repo": {"name": "other/repo2"},
+         "created_at": "2026-08-02T10:00:00Z",
+         "payload": {"commits": [{"sha": "c" * 40}]}},
+        {"type": "PushEvent", "payload": {"commits": [{"sha": "d" * 40}]}},  # no repo
+    ]
+    pushed = parse_push_commits(events)
+    assert pushed == {
+        "octocat/repo1": [("a" * 40, "2026-08-01"), ("b" * 40, "2026-08-01")],
+        "other/repo2": [("c" * 40, "2026-08-02")],
+    }
 
 
 def test_ghost_carries_commit_context():
