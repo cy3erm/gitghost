@@ -265,6 +265,8 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p.add_argument("--version", action="version", version=f"gitghost {__version__}")
+    p.add_argument("-i", "--interactive", action="store_true",
+                   help="open the interactive console (also default when run with no arguments)")
     p.add_argument("identity", nargs="?", metavar="USER",
                    help="GitHub username to audit")
     p.add_argument("--repo", metavar="REPO", help="scan a single repo by URL or owner/name")
@@ -291,7 +293,20 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
-    args = build_parser().parse_args()
+    parser = build_parser()
+    args = parser.parse_args()
+
+    # bare launch (or -i) on a terminal opens the interactive console
+    if args.interactive or (len(sys.argv) == 1 and sys.stdin.isatty()
+                            and sys.stdout.isatty()):
+        try:
+            from .console import run_console
+            print_banner()
+            run_console(debug=args.debug)
+        except KeyboardInterrupt:
+            err("interrupted")
+            raise SystemExit(130) from None
+        return
 
     try:
         _run(args)
@@ -313,8 +328,11 @@ def _run(args: argparse.Namespace) -> None:
     if modes > 1:
         die("pick exactly one target: USER, --repo, --org, or --local")
     if not modes:
-        build_parser().error(
-            "provide a GitHub username, --org <name>, --repo <url>, or --local <path>")
+        err("nothing to scan")
+        print("    start the interactive console by running gitghost with no "
+              "arguments, or pass a target:\n", file=sys.stderr)
+        build_parser().print_usage(file=sys.stderr)
+        raise SystemExit(2)
 
     print_banner()
 

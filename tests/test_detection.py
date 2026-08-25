@@ -54,6 +54,42 @@ def test_new_provider_keys_detected():
         assert label in hits, f"missed {label}: {line}"
 
 
+def test_expanded_provider_rules_detected():
+    cases = {
+        "OpenAI Project API Key": 'OPENAI_KEY = "sk-proj-abcdefghijklmnopqrstuvwx0123456789ABCDEFGH"',
+        "GitHub Fine-Grained PAT": 't = "github_pat_' + "A" * 22 + "_" + "B" * 59 + '"',
+        "GitLab Personal Access Token": 't = "glpat-ABCDEFGHIJKLMNOPQRST"',
+        "Google OAuth Refresh Token": 'rt = "1//0aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789"',
+        "Groq API Key": 'k = "gsk_ABCDEFGHIJKLMNOPQRSTUVWX"',
+        "Perplexity API Key": 'k = "pplx-' + "a1B2c3D4e5" * 5 + '"',
+        "xAI (Grok) API Key": 'k = "xai-ABCDEFGHIJ0123456789abcd"',
+        "Notion Integration Secret": 'n = "secret_' + "a1B2c3D4e5" * 4 + "a1B" + '"',
+        "Figma Personal Access Token": 'f = "figd_abcdefghijklmnopqrstuvwx"',
+        "Linear API Key": 'l = "lin_api_' + "a1B2c3D4e5" * 4 + '"',
+        "Netlify Personal Access Token": 'n = "nfp_' + "a1B2c3D4e5" * 4 + "a1B2c3" + '"',
+        "Postman API Key": 'p = "PMAK-abcdefghijklmnopqrstuvwx-abcdefghijklmnopqrstuvwxyzabcdefgh"',
+        "Sentry Auth Token": 's = "sntrys_' + "a1B2c3D4e5/" * 5 + '"',
+        # assembled at runtime so GitHub push protection doesn't flag the fixtures
+        "Shopify Access Token": 'sh = "shpat_' + "a1b2c3d4" * 4 + '"',
+        "Square Access Token": 'sq = "EAAA' + "a1B2+9c3D4e5" * 5 + '"',
+        "Razorpay Live Key ID": 'rz = "rzp_live_AbCdEfGhIjKlMn"',
+        "HashiCorp Vault Service Token": 'v = "hvs.ABCDEFGHIJKLMNOPQRS"',
+        "PlanetScale Service Token": 'ps = "pscale_tkn_us-east-1_" + "abcdefghijklmnopqrstuvwxyz01"',
+        "DigitalOcean Personal Access Token":
+            'do = "dop_v1_' + "a1b2c3d4" * 8 + '"',
+        "Doppler Service Token": 'dp = "dp.pt.' + "a1B2c3D4e5" * 4 + "a1B2c" + '"',
+        "Replicate API Token": 'r = "r8_Ab1Cd2Ef3Gh4Ij5Kl6Mn7Op8Qr9St0Uv1Wx2Y3Z4"',
+    }
+    for label, line in cases.items():
+        hits = [f.label for f in scan_text(line)]
+        assert label in hits, f"missed {label}: {line}"
+
+
+def test_slack_app_token_detected():
+    hits = [f.label for f in scan_text('t = "xapp-1-ABCDEF012345678-9012345678-abcdef"')]
+    assert "Slack Token" in hits
+
+
 # ---- false positives: these MUST NOT be flagged as secrets ----
 
 FALSE_POSITIVES = [
