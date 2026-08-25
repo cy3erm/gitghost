@@ -10,7 +10,12 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "cy3erm" }]
-keywords = ["security", "secrets-detection", "git", "osint", "devsecops", "bug-bounty"]
+keywords = [
+    "security", "secrets-detection", "secret-scanning", "credential-scanner",
+    "leaked-credentials", "git", "git-history", "osint", "devsecops",
+    "bug-bounty", "pentest", "red-team", "offensive-security",
+    "api-keys", "security-tools", "cli", "github",
+]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
