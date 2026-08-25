@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from . import __version__, github
 from .banner import print_banner
 from .ghost import recover_force_pushed, recover_ghosts
-from .metadata import MetadataReport, analyze_metadata
+from .metadata import MetadataReport, _NOREPLY, analyze_metadata, attribute_emails
 from .report import render_report
 from .rules import Finding, scan_text
 from .scanner import HOT_FILES, scan_repo
@@ -50,6 +50,7 @@ def run_local(path: str, name: str, out: str) -> None:
             "pass the path to a checkout on disk (or use --repo/--org for GitHub repos)")
     info(f"scanning local repo: {name}")
     findings, meta = _scan_one(path, name)
+    attribute_emails(meta)
     card = compute_score(findings, meta)
     _finish(name, card, findings, meta, 1, out)
 
@@ -68,6 +69,7 @@ def run_repo(url: str, out: str) -> None:
         findings, meta = _scan_one(dest, repo.name)
         for finding in findings:
             finding.repo_url = repo.html_url
+        attribute_emails(meta, login=repo.full_name.split("/", 1)[0])
         card = compute_score(findings, meta)
         _finish(repo.full_name, card, findings, meta, 1, out)
 
@@ -234,8 +236,7 @@ def run_identity(identity: str, limit: int, out: str, jobs: int = 4,
         all_findings += gist_findings
 
     merged = merge_metas(metas)
-    card = compute_score(all_findings, merged)
-    merged = merge_metas(metas)
+    attribute_emails(merged, profile, login=identity)
     card = compute_score(all_findings, merged)
     _finish(identity, card, all_findings, merged, repos_scanned, out,
             profile=profile)
@@ -300,6 +301,7 @@ def run_org(org: str, limit: int, out: str, jobs: int = 4,
         metas += mm
 
     merged = merge_metas(metas)
+    attribute_emails(merged)
     card = compute_score(all_findings, merged)
     _finish(f"org:{org}", card, all_findings, merged, len(repos), out)
 
@@ -308,8 +310,16 @@ def merge_metas(metas: list[MetadataReport]) -> MetadataReport:
     """Fold per-repo metadata reports into one."""
     merged = MetadataReport()
     for m in metas:
-        merged.emails += [e for e in m.emails if e not in merged.emails]
-        merged.noreply_emails += [e for e in m.noreply_emails if e not in merged.noreply_emails]
+        for e in m.emails + m.noreply_emails:
+            known = merged.emails + merged.noreply_emails
+            if e not in known:
+                (merged.noreply_emails if _NOREPLY.search(e) else merged.emails).append(e)
+            authors = m.email_authors.get(e)
+            if authors:
+                merged.email_authors.setdefault(e, set()).update(authors)
+            merged.email_repos[e] = max(merged.email_repos.get(e, 0),
+                                        m.email_repos.get(e, 0))
+        merged.other_emails += [e for e in m.other_emails if e not in merged.other_emails]
         merged.commit_count += m.commit_count
         merged.dominant_utc_offset = merged.dominant_utc_offset or m.dominant_utc_offset
         merged.likely_active_hours = merged.likely_active_hours or m.likely_active_hours

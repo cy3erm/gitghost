@@ -114,6 +114,11 @@ def render_report(identity: str, card: ScoreCard, findings: list[Finding],
         </section>"""
 
     emails = ", ".join(_esc(e) for e in meta.emails[:3]) or "none exposed"
+    if getattr(meta, "other_emails", None):
+        others = ", ".join(_esc(e) for e in meta.other_emails[:3])
+        more = f" (+{len(meta.other_emails) - 3} more)" if len(meta.other_emails) > 3 else ""
+    else:
+        others, more = "", ""
     if profile is not None:
         who = " · ".join(x for x in (profile.name, profile.company, profile.location) if x) or "—"
         contact = " · ".join(x for x in (profile.email, profile.blog, profile.twitter) if x) or "—"
@@ -130,6 +135,7 @@ def render_report(identity: str, card: ScoreCard, findings: list[Finding],
       <div class="block-head"><span class="eyebrow">What your commits reveal about you</span></div>
       <div class="meta-grid">{profile_cells}
         <div class="meta-cell"><div class="mk">Author email</div><div class="mv">{emails}</div></div>
+        {'<div class="meta-cell"><div class="mk">Co-author emails (not the subject)</div><div class="mv">' + others + more + '</div></div>' if others else ''}
         <div class="meta-cell"><div class="mk">Timezone (inferred)</div><div class="mv">{_esc(meta.dominant_utc_offset or '—')}</div></div>
         <div class="meta-cell"><div class="mk">Active hours (inferred)</div><div class="mv">{_esc(meta.likely_active_hours or '—')}</div></div>
         <div class="meta-cell"><div class="mk">Commits analyzed</div><div class="mv">{meta.commit_count:,}</div></div>

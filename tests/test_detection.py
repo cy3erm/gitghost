@@ -13,6 +13,7 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 from gitghost.rules import scan_text, _looks_like_secret_value
 from gitghost.ghost import recover_ghosts
@@ -203,6 +204,57 @@ def test_parse_push_commits_extracts_shas_per_repo():
         "octocat/repo1": [("a" * 40, "2026-08-01"), ("b" * 40, "2026-08-01")],
         "other/repo2": [("c" * 40, "2026-08-02")],
     }
+
+
+# ---- email attribution: co-author emails must not be pinned on the subject ----
+
+def test_coauthor_email_not_attributed_to_subject():
+    from gitghost.metadata import MetadataReport, attribute_emails
+    meta = MetadataReport(
+        emails=["contributor@example.com"],
+        noreply_emails=["123456+owner@users.noreply.github.com"],
+        email_authors={
+            "contributor@example.com": {"Some Contributor"},
+            "123456+owner@users.noreply.github.com": {"Owner Name"},
+        },
+        email_repos={"contributor@example.com": 1,
+                     "123456+owner@users.noreply.github.com": 2},
+    )
+    profile = SimpleNamespace(login="owner", name="Owner Name", email="")
+    attribute_emails(meta, profile, login="owner")
+    # the contributor's address must NOT be reported as the subject's exposure
+    assert meta.emails == []
+    assert meta.other_emails == ["contributor@example.com"]
+    # ...and it must not fire the score driver either
+    from gitghost.score import compute_score
+    card = compute_score([], meta)
+    assert not any("real author email" in d for d in card.drivers)
+
+
+def test_subject_email_attributed_via_profile_and_name_match():
+    from gitghost.metadata import MetadataReport, attribute_emails
+    meta = MetadataReport(
+        emails=["real.person@gmail.com"],
+        email_authors={"real.person@gmail.com": {"Real P. Erson"}},
+        email_repos={"real.person@gmail.com": 1},
+    )
+    attribute_emails(meta, SimpleNamespace(login="rperson", name="Real P. Erson",
+                                           email=""), login="rperson")
+    assert meta.emails == ["real.person@gmail.com"]
+    assert meta.other_emails == []
+
+    # no signals at all, single repo: honest fallback keeps it listed
+    meta2 = MetadataReport(emails=["x@y.z"], email_authors={"x@y.z": {"X"}},
+                           email_repos={"x@y.z": 1})
+    attribute_emails(meta2)
+    assert meta2.emails == ["x@y.z"]
+
+    # spanning two repos is ownership evidence even without names
+    meta3 = MetadataReport(emails=["spanning@gmail.com"],
+                           email_authors={"spanning@gmail.com": {"???"}},
+                           email_repos={"spanning@gmail.com": 2})
+    attribute_emails(meta3)
+    assert meta3.emails == ["spanning@gmail.com"]
 
 
 def test_ghost_carries_commit_context():
