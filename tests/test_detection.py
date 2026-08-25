@@ -74,7 +74,7 @@ def test_expanded_provider_rules_detected():
         "Square Access Token": 'sq = "EAAA' + "a1B2+9c3D4e5" * 5 + '"',
         "Razorpay Live Key ID": 'rz = "rzp_live_AbCdEfGhIjKlMn"',
         "HashiCorp Vault Service Token": 'v = "hvs.ABCDEFGHIJKLMNOPQRS"',
-        "PlanetScale Service Token": 'ps = "pscale_tkn_us-east-1_" + "abcdefghijklmnopqrstuvwxyz01"',
+        "PlanetScale Service Token": 'ps = "pscale_tkn_' + "us-east-1_abcdefghijklmnopqrstuvwxyz01" + '"',
         "DigitalOcean Personal Access Token":
             'do = "dop_v1_' + "a1b2c3d4" * 8 + '"',
         "Doppler Service Token": 'dp = "dp.pt.' + "a1B2c3D4e5" * 4 + "a1B2c" + '"',
