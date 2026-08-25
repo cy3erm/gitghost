@@ -266,7 +266,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--version", action="version", version=f"gitghost {__version__}")
     p.add_argument("-i", "--interactive", action="store_true",
-                   help="open the interactive console (also default when run with no arguments)")
+                   help="guided mode: pick a target and go (also default when run with no arguments)")
     p.add_argument("identity", nargs="?", metavar="USER",
                    help="GitHub username to audit")
     p.add_argument("--repo", metavar="REPO", help="scan a single repo by URL or owner/name")

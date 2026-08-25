@@ -1,24 +1,15 @@
-"""Interactive console — a small Metasploit-style shell.
+"""Guided interactive mode.
 
-Set a target and options, then `run`. Running clears the terminal, prints the
-banner, and executes the scan. The same scan functions as the CLI do the work,
-so behavior and output are identical.
-
-Launch with:  gitghost            (bare, on a TTY)
-              gitghost -i         (explicit)
+Run gitghost bare (or with -i): the screen clears, the banner prints, you
+pick a target, type it in, and the scan starts. Same engine and output as
+the CLI — this is just a friendlier front door.
 """
 
 import os
-import shlex
 import sys
 
 from .banner import print_banner
-from .ui import err, info
-
-try:
-    import readline  # noqa: F401 — arrow keys / history on Unix
-except ImportError:
-    readline = None
+from .ui import err
 
 
 def _clear_screen() -> None:
@@ -30,200 +21,82 @@ def _clear_screen() -> None:
             sys.stdout.flush()
 
 
-# target -> (description, cli flag name)
-TARGETS = ("local", "repo", "org", "user")
+_CREDITS = "\033[2mby cy3erm\033[0m · \033[2mgithub.com/cy3erm/gitghost"
+_RESET = "\033[0m"
 
-_BOOL_SETTINGS = {"gists", "network", "members"}
-_INT_SETTINGS = {"limit", "jobs"}
-_STR_SETTINGS = TARGETS + ("name", "out")
+_MENU = """
+  \033[38;5;208m1\033[0m) Scan a GitHub user          public repos + gists
+  \033[38;5;208m2\033[0m) Scan an organization       public repos of an org
+  \033[38;5;208m3\033[0m) Scan a single repo         by owner/name or URL
+  \033[38;5;208m4\033[0m) Scan a local checkout      a repo already on disk
+"""
 
-_DEFAULTS: dict[str, object] = {
-    "local": "", "repo": "", "org": "", "user": "",
-    "name": "local-repo",
-    "limit": 30, "jobs": 4,
-    "out": "gitghost-dossier.html",
-    "gists": True, "network": False, "members": False,
+_PROMPTS = {
+    "1": ("GitHub username", "user"),
+    "2": ("Organization name", "org"),
+    "3": ("Repo (owner/name or URL)", "repo"),
+    "4": ("Path to local checkout", "local"),
 }
 
-_HELP = """\
-  set <key> <value>   set an option (see `show` for keys)
-  show                display current options
-  run                 clear screen + banner, then execute the configured scan
-  clear               clear screen and reprint the banner
-  help                this message
-  exit                quit
 
-targets (set exactly one):
-  user <name>         GitHub username to audit
-  org <name>          organization's public repos
-  repo <owner/name>   one repo by URL or owner/name
-  local <path>        a checkout already on disk
-
-options:
-  limit <n>           max repos per identity      (default 30)
-  jobs <n>            parallel clones/scans       (default 4)
-  out <path>          report path                 (default gitghost-dossier.html)
-  gists on|off        also scan public gists      (default on)
-  network on|off      with user: crawl followers/following
-  members on|off      with org: crawl public members
-  name <label>        label for local scans       (default local-repo)"""
-
-
-class Console:
-    def __init__(self, debug: bool = False) -> None:
-        self.debug = debug
-        self.settings: dict[str, object] = dict(_DEFAULTS)
-
-    # ------------------------------------------------------------ helpers
-
-    @property
-    def _prompt(self) -> str:
-        target = next((t for t in TARGETS if self.settings[t]), "?")
-        return "\033[38;5;208mgitghost\033[0m [\033[36m" + str(target) \
-            + "\033[0m] > "
-
-    def _parse_bool(self, value: str) -> bool | None:
-        v = value.lower()
-        if v in ("on", "true", "yes", "1"):
-            return True
-        if v in ("off", "false", "no", "0"):
-            return False
+def _input(prompt: str) -> str | None:
+    """Read a line; None means the user wants out (Ctrl+C / EOF)."""
+    try:
+        return input(prompt).strip()
+    except (EOFError, KeyboardInterrupt):
         return None
 
-    def _active_target(self) -> tuple[str, str] | None:
-        for t in TARGETS:
-            value = self.settings[t]
-            if value:
-                return t, str(value)
-        return None
 
-    # ------------------------------------------------------------ commands
+def _dispatch(kind: str, value: str, debug: bool) -> None:
+    from .cli import run_identity, run_local, run_org, run_repo
 
-    def cmd_set(self, args: list[str]) -> None:
-        if len(args) != 2:
-            err("usage: set <key> <value>   (keys: see `show`)")
-            return
-        key, raw = args
-        if key in TARGETS:
-            for t in TARGETS:
-                self.settings[t] = ""
-            self.settings[key] = raw
-            info(f"{key} -> {raw}")
-            return
-        if key in _INT_SETTINGS:
-            try:
-                n = int(raw)
-            except ValueError:
-                err(f"{key} must be a number")
-                return
-            if n < 1:
-                err(f"{key} must be >= 1")
-                return
-            self.settings[key] = n
-            info(f"{key} -> {n}")
-            return
-        if key in _BOOL_SETTINGS:
-            b = self._parse_bool(raw)
-            if b is None:
-                err(f"{key} takes on|off (got {raw!r})")
-                return
-            self.settings[key] = b
-            info(f"{key} -> {'on' if b else 'off'}")
-            return
-        if key in _STR_SETTINGS:
-            self.settings[key] = raw
-            info(f"{key} -> {raw}")
-            return
-        err(f"unknown option {key!r} (keys: see `show`)")
-
-    def cmd_show(self, _args: list[str]) -> None:
-        width = max(len(k) for k in self.settings)
-        print()
-        for k, v in self.settings.items():
-            marker = "*" if (k in TARGETS and v) else " "
-            value = "(on)" if v is True else "(off)" if v is False else v
-            print(f" {marker} {k:<{width}}   {value}")
-        print()
-
-    def cmd_run(self, debug: bool) -> None:
-        from .cli import run_local, run_org, run_repo, run_identity
-
-        target = self._active_target()
-        if not target:
-            err("no target set — use e.g.  set user octocat")
-            return
-        kind, value = target
-
-        s = self.settings
-        limit, jobs = int(s["limit"]), int(s["jobs"])
-        out = str(s["out"])
-
-        _clear_screen()
-        print_banner()
-
-        try:
-            if kind == "user":
-                run_identity(value, limit, out, jobs=jobs,
-                             gists=bool(s["gists"]), network=bool(s["network"]))
-            elif kind == "org":
-                run_org(value, limit, out, jobs=jobs,
-                        members=bool(s["members"]), gists=bool(s["gists"]))
-            elif kind == "repo":
-                run_repo(value, out)
-            elif kind == "local":
-                run_local(value, str(s["name"]) or "local-repo", out)
-        except SystemExit:
-            pass  # die() already printed the reason; stay in the console
-        except Exception as e:
-            if self.debug:
-                raise
-            err(f"unexpected failure: {type(e).__name__}: {e}")
-            info("restart with --debug for the full traceback")
-        info("done. back at the prompt.")
-
-    # ------------------------------------------------------------ main loop
-
-    def repl(self) -> None:
-        _clear_screen()
-        print_banner()
-        print("type \033[2mhelp\033[0m for commands, \033[2mshow\033[0m for current options.\n")
-
-        while True:
-            try:
-                line = input(self._prompt).strip()
-            except (EOFError, KeyboardInterrupt):
-                print("\nbye.")
-                return
-            if not line:
-                continue
-
-            try:
-                parts = shlex.split(line)
-            except ValueError:
-                err("could not parse that line (unbalanced quote?)")
-                continue
-            cmd, args = parts[0].lower(), parts[1:]
-
-            if cmd in ("exit", "quit", "q"):
-                return
-            elif cmd == "help":
-                print(_HELP)
-            elif cmd == "clear":
-                _clear_screen()
-                print_banner()
-            elif cmd == "set":
-                self.cmd_set(args)
-            elif cmd in ("show", "options"):
-                self.cmd_show(args)
-            elif cmd == "run":
-                try:
-                    self.cmd_run(debug=self.debug)
-                except KeyboardInterrupt:
-                    print()
-                    err("scan interrupted — partial results discarded")
-            else:
-                err(f"unknown command {cmd!r} — type help")
+    try:
+        if kind == "user":
+            run_identity(value, limit=30, out="gitghost-dossier.html")
+        elif kind == "org":
+            run_org(value, limit=30, out="gitghost-dossier.html")
+        elif kind == "repo":
+            run_repo(value, out="gitghost-dossier.html")
+        elif kind == "local":
+            run_local(value, value.rstrip("/").rsplit("/", 1)[-1] or "local-repo",
+                      "gitghost-dossier.html")
+    except SystemExit:
+        pass  # die() already printed why; stay interactive
+    except Exception as e:
+        if debug:
+            raise
+        err(f"unexpected failure: {type(e).__name__}: {e}")
+        print("    \033[2mrestart with --debug for the full traceback\033[0m")
 
 
 def run_console(debug: bool = False) -> None:
-    Console(debug=debug).repl()
+    _clear_screen()
+    print_banner()
+    print(_CREDITS + _RESET)
+
+    while True:
+        print(_MENU)
+        choice = _input("select a mode [1-4], q to quit > ")
+        if choice is None or choice.lower() in ("q", "quit", "exit"):
+            print("bye.")
+            return
+        if choice not in _PROMPTS:
+            err(f"no mode {choice!r} — pick 1, 2, 3, 4, or q")
+            continue
+
+        label, kind = _PROMPTS[choice]
+        value = _input(f"{label} > ")
+        if value is None:
+            print("\nbye.")
+            return
+        if not value:
+            err("you need to enter something first")
+            continue
+
+        print()
+        _dispatch(kind, value, debug)
+
+        again = _input("\nscan another? [Y/n] > ")
+        if again and again.lower().startswith("n"):
+            print("bye.")
+            return

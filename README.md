@@ -45,9 +45,9 @@ python3 -m gitghost
 
 ## Usage
 
-### Interactive console
+### Interactive mode
 
-Run gitghost with no arguments and you get a Metasploit-style console: set options, hit `run`, watch it go. Every `run` clears the screen, prints the banner, and executes the scan — then drops you back at the prompt.
+Run gitghost with no arguments and you get a guided launcher: the screen clears, the banner prints, you pick what to scan, type it in, and off it goes.
 
 ```
 $ gitghost
@@ -57,39 +57,29 @@ $ gitghost
  \__, /_/\__/\__, /_/ /_/\____/____/\__/
 /____/      /____/
 the secrets you deleted are still in git history v1.3.0
+by cy3erm · github.com/cy3erm/gitghost
 
-type help for commands, show for current options.
+  1) Scan a GitHub user          public repos + gists
+  2) Scan an organization       public repos of an org
+  3) Scan a single repo         by owner/name or URL
+  4) Scan a local checkout      a repo already on disk
 
-gitghost [?] > set user octocat
-[*] user -> octocat
-gitghost [user] > set limit 10
-[*] limit -> 10
-gitghost [user] > run
+select a mode [1-4], q to quit > 1
+GitHub username > octocat
 
-  ... screen clears, banner prints, scan runs ...
+[*] enumerating public repos for @octocat ...
+...
 
 [+] exposure score: 29/100  [LOW, grade B]
     · real author email exposed (octocat@nowhere.com)
 [+] dossier written to gitghost-dossier.html
-[*] done. back at the prompt.
-gitghost [user] > exit
+
+scan another? [Y/n] >
 ```
-
-| Command | What it does |
-|---|---|
-| `set <key> <value>` | set a target or option |
-| `show` | table of current options (`*` marks the active target) |
-| `run` | clear + banner + scan |
-| `clear` | clear + banner only |
-| `help` | command reference |
-| `exit` | quit |
-
-Targets: `user <name>`, `org <name>`, `repo <owner/name-or-url>`, `local <path>`.
-Options: `limit`, `jobs`, `out`, `gists on\|off`, `network on\|off`, `members on\|off`, `name`.
 
 ### One-shot CLI
 
-Every console option has a flag equivalent:
+Interactive mode covers the common cases; every option also has a flag for scripting:
 
 ```bash
 gitghost <username>                 # audit a user's public repos (+ gists)
