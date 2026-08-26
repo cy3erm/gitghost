@@ -13,8 +13,6 @@ Finds live credentials in a GitHub account's public repos — *and* the ones tha
 
 I built this after noticing how often the real leak isn't in someone's current code — it's in a commit from eight months ago that they thought they'd cleaned up. You paste an API key, catch it, delete the line, and move on. The latest version looks fine. But the old commit still has the key, and anyone who clones the repo gets it. Most scanners only look at your current files and miss this entirely. gitghost digs through history for exactly those, then rolls everything into a single **exposure score** so you can tell how bad things are at a glance.
 
-![gitghost interactive console](docs/screencast.gif)
-
 ## Highlights
 
 - **Ghost recovery** — walks the full git history of every repo (including unreachable objects) to recover secrets that were removed from HEAD but never purged
