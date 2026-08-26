@@ -332,3 +332,17 @@ def test_score_within_bounds_and_empty_is_minimal():
 def test_score_handles_none_meta():
     card = compute_score([], None)   # the all-clones-failed path
     assert 0 <= card.score <= 100
+
+
+def test_local_scan_rejects_subdir_of_repo():
+    """A subdirectory of a checkout must not silently scan the parent repo."""
+    import gitghost.cli as cli
+    with tempfile.TemporaryDirectory() as d:
+        _run(["git", "init", "-q"], d)
+        sub = Path(d) / "demo"
+        sub.mkdir()
+        try:
+            cli.run_local(str(sub), "demo", "/dev/null")
+            raise AssertionError("expected SystemExit")
+        except SystemExit:
+            pass

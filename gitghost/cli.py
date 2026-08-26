@@ -1,5 +1,6 @@
 import argparse
 import os
+import subprocess
 import sys
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
@@ -48,6 +49,16 @@ def run_local(path: str, name: str, out: str) -> None:
     if not os.path.isdir(path):
         die(f"no such directory: {path!r}",
             "pass the path to a checkout on disk (or use --repo/--org for GitHub repos)")
+    real = os.path.realpath(path)
+    top = subprocess.run(["git", "-C", path, "rev-parse", "--show-toplevel"],
+                         capture_output=True, text=True).stdout.strip()
+    if not top:
+        die(f"{path!r} is not a git repository",
+            "pass the root of a checkout (it must contain a .git), "
+            "or use --repo/--org for GitHub repos")
+    if os.path.realpath(top) != real:
+        die(f"{path!r} is inside a bigger repo rooted at {top!r}",
+            "git commands would silently scan the parent repo — pass the repo root itself")
     info(f"scanning local repo: {name}")
     findings, meta = _scan_one(path, name)
     attribute_emails(meta)
