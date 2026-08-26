@@ -58,7 +58,7 @@ $ gitghost
  / /_/ / / /_/ /_/ / / / /_/ (__  ) /_
  \__, /_/\__/\__, /_/ /_/\____/____/\__/
 /____/      /____/
-the secrets you deleted are still in git history v1.3.0
+the secrets you deleted are still in git history v1.4.1
 by cy3erm · github.com/cy3erm/gitghost
 
   1) Scan a GitHub user          public repos + gists
